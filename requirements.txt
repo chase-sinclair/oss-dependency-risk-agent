@@ -1,0 +1,63 @@
+# ── LLM & Agent Orchestration ─────────────────────────────────────────────────
+anthropic>=0.40.0                  # Claude API client
+langgraph>=0.2.0                   # Agent graph orchestration
+langchain>=0.3.0                   # LangChain core abstractions
+langchain-anthropic>=0.3.0         # LangChain <-> Anthropic integration
+langchain-community>=0.3.0         # Community tools and loaders
+
+# ── Vector Database ────────────────────────────────────────────────────────────
+pinecone>=5.0.0                    # Pinecone vector store client
+
+# ── AWS / Cloud Storage ────────────────────────────────────────────────────────
+boto3>=1.35.0                      # AWS SDK (S3 bronze layer)
+botocore>=1.35.0                   # AWS core (transitive, pinned for stability)
+
+# ── Databricks ────────────────────────────────────────────────────────────────
+databricks-sdk>=0.32.0             # Databricks workspace & jobs API
+databricks-connect>=15.1.0         # Remote PySpark execution against Databricks
+
+# ── PySpark ───────────────────────────────────────────────────────────────────
+pyspark>=3.5.0                     # Local PySpark (matches Databricks runtime)
+
+# ── dbt ───────────────────────────────────────────────────────────────────────
+dbt-core>=1.8.0                    # dbt transformation engine
+dbt-databricks>=1.8.0              # dbt adapter for Databricks / Delta Lake
+
+# ── Data Processing ───────────────────────────────────────────────────────────
+pandas>=2.2.0                      # DataFrame utilities
+pyarrow>=17.0.0                    # Parquet / Arrow serialization
+numpy>=1.26.0                      # Numerical operations
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+streamlit>=1.38.0                  # Dashboard UI
+plotly>=5.24.0                     # Interactive charts
+altair>=5.4.0                      # Declarative visualizations
+
+# ── Configuration & Secrets ───────────────────────────────────────────────────
+python-dotenv>=1.0.0               # Load .env into environment
+pydantic>=2.9.0                    # Settings models and data validation
+pydantic-settings>=2.5.0           # Pydantic-based settings management
+
+# ── HTTP & Networking ─────────────────────────────────────────────────────────
+httpx>=0.27.0                      # Async HTTP client (used by Anthropic SDK)
+requests>=2.32.0                   # Sync HTTP (GitHub API, GH Archive)
+tenacity>=9.0.0                    # Retry logic for API calls
+
+# ── Scheduling & Workflow ─────────────────────────────────────────────────────
+schedule>=1.2.0                    # Lightweight Python job scheduling
+prefect>=3.0.0                     # Optional: workflow orchestration layer
+
+# ── Logging & Observability ───────────────────────────────────────────────────
+structlog>=24.4.0                  # Structured logging
+rich>=13.8.0                       # Pretty terminal output / logging
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.3.0                      # Test framework
+pytest-asyncio>=0.24.0             # Async test support
+pytest-cov>=5.0.0                  # Coverage reporting
+moto>=5.0.0                        # AWS service mocks for unit tests
+
+# ── Dev Tooling ───────────────────────────────────────────────────────────────
+ruff>=0.6.0                        # Linter + formatter
+mypy>=1.11.0                       # Static type checking
+pre-commit>=3.8.0                  # Git hook manager
