@@ -1,0 +1,94 @@
+{
+  "name": "oss-risk-agent-bronze-to-silver",
+  "description": "OSS Dependency Risk Agent: reads GitHub Archive JSON.gz from S3 bronze layer, flattens and deduplicates events, and MERGEs into workspace.default.silver_github_events (Delta).",
+  "tags": {
+    "project": "oss-risk-agent",
+    "layer": "silver",
+    "owner": "data-platform"
+  },
+
+  "tasks": [
+    {
+      "task_key": "setup",
+      "description": "Create schema, configure S3 credentials, verify connectivity.",
+      "notebook_task": {
+        "notebook_path": "/Shared/oss-risk-agent/00_setup",
+        "source": "WORKSPACE",
+        "base_parameters": {
+          "reset_table": "false"
+        }
+      },
+      "libraries": [],
+      "timeout_seconds": 300,
+      "max_retries": 1,
+      "min_retry_interval_millis": 30000
+    },
+    {
+      "task_key": "bronze_to_silver",
+      "description": "Read S3 bronze, transform, MERGE into silver Delta table.",
+      "depends_on": [
+        { "task_key": "setup" }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/oss-risk-agent/01_bronze_to_silver",
+        "source": "WORKSPACE",
+        "base_parameters": {
+          "start_date": "",
+          "end_date": ""
+        }
+      },
+      "libraries": [],
+      "timeout_seconds": 7200,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000
+    }
+  ],
+
+  "job_clusters": [],
+
+  "environments": [
+    {
+      "environment_key": "Default",
+      "spec": {
+        "client": "2",
+        "libraries": []
+      }
+    }
+  ],
+
+  "email_notifications": {
+    "on_failure": [],
+    "on_success": [],
+    "no_alert_for_skipped_runs": true
+  },
+
+  "webhook_notifications": {},
+
+  "schedule": {
+    "_comment": "Uncomment to enable daily scheduling at 03:00 UTC.",
+    "_quartz_cron_expression": "0 0 3 * * ?",
+    "_timezone_id": "UTC",
+    "_pause_status": "PAUSED"
+  },
+
+  "max_concurrent_runs": 1,
+  "timeout_seconds": 10800,
+
+  "parameters": [
+    {
+      "name": "start_date",
+      "default": ""
+    },
+    {
+      "name": "end_date",
+      "default": ""
+    }
+  ],
+
+  "_metadata": {
+    "created_by": "databricks_client.py",
+    "project": "oss-dependency-risk-agent",
+    "phase": "2 — Bronze to Silver",
+    "notebook_upload_path": "/Shared/oss-risk-agent"
+  }
+}

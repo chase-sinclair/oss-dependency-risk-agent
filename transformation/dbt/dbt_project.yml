@@ -1,0 +1,26 @@
+name: oss_risk_agent
+version: '1.0.0'
+config-version: 2
+
+profile: oss_risk_agent
+
+model-paths:    ["models"]
+analysis-paths: ["analyses"]
+test-paths:     ["tests"]
+seed-paths:     ["seeds"]
+macro-paths:    ["macros"]
+
+target-path:  "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  oss_risk_agent:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    gold:
+      +materialized: table
+      +file_format: delta

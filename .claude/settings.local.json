@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python -c ':*)",
-      "Bash(python scripts/run_ingestion.py --help)"
+      "Bash(python scripts/run_ingestion.py --help)",
+      "Bash(python scripts/run_silver.py --help)"
     ]
   }
 }

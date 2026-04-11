@@ -1,0 +1,12 @@
+-r requirements.txt
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.3.0                      # Test framework
+pytest-asyncio>=0.24.0             # Async test support
+pytest-cov>=5.0.0                  # Coverage reporting
+moto>=5.0.0                        # AWS service mocks for unit tests
+
+# ── Dev Tooling ───────────────────────────────────────────────────────────────
+ruff>=0.6.0                        # Linter + formatter
+mypy>=1.11.0                       # Static type checking
+pre-commit>=3.8.0                  # Git hook manager

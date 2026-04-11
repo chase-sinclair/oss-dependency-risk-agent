@@ -1,0 +1,83 @@
+version: 2
+
+models:
+  - name: gold_project_health
+    description: >
+      Wide monthly health metrics per project, joining commit activity,
+      issue health, PR health, and contributor diversity.
+      One row per (repo_full_name, event_month).
+    columns:
+      - name: repo_full_name
+        description: "org/repo slug"
+        data_tests:
+          - not_null
+      - name: event_month
+        description: "First day of the calendar month (UTC)"
+        data_tests:
+          - not_null
+      - name: commits_per_week
+        description: "Estimated weekly commit cadence (total_commits / 30 * 7)"
+      - name: issue_resolution_rate
+        description: "issues_closed / issues_opened. Null if no issue events in month."
+      - name: pr_merge_rate
+        description: "prs_closed / prs_opened. Null if no PR events in month."
+      - name: contributor_count
+        description: "Distinct committers in the month"
+      - name: bus_factor_risk
+        description: "Fraction of commits from top-3 contributors (0–1). Higher = more concentrated."
+      - name: computed_at
+        description: "Timestamp when the dbt run completed"
+
+  - name: gold_health_scores
+    description: >
+      Composite health score (0–10) per project per month, derived from
+      weighted normalisation of the five core health signals.
+      Includes month-over-month health_trend.
+    columns:
+      - name: repo_full_name
+        description: "org/repo slug"
+        data_tests:
+          - not_null
+      - name: event_month
+        description: "First day of the calendar month (UTC)"
+        data_tests:
+          - not_null
+      - name: health_score
+        description: "Weighted composite score, 0–10"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+      - name: health_trend
+        description: "Month-over-month change in health_score. Null for first observed month."
+      - name: commit_score
+        description: "Normalised commit frequency component, 0–10"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+      - name: issue_score
+        description: "Normalised issue resolution component, 0–10"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+      - name: pr_score
+        description: "Normalised PR merge rate component, 0–10"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+      - name: contributor_score
+        description: "Normalised contributor diversity component, 0–10"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+      - name: bus_factor_score
+        description: "Normalised (inverted) bus factor component, 0–10"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10

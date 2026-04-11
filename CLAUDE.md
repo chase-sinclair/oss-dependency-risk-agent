@@ -9,10 +9,7 @@
 **Project Name:** OSS Dependency Risk Agent
 
 **What It Does:**
-An autonomous agent system that monitors 200+ open source dependencies by
-analyzing GitHub Archive event data through a Databricks/dbt pipeline,
-detects health deterioration signals, and automatically generates risk
-assessments using a LangGraph agent powered by Claude (Anthropic API).
+
 
 **Target Audience:** Engineering leads and DevOps/platform engineers at
 mid-to-large organizations managing complex OSS dependency ecosystems.
@@ -116,8 +113,8 @@ the full list. Key variables:
 |---|---|---|
 | 0 | Environment setup, scaffold, credentials | ✅ Complete |
 | 1 | GitHub Archive → S3 ingestion | ✅ Complete |
-| 2 | Databricks Bronze → Silver | 🔄 In Progress |
-| 3 | dbt Gold layer — health metrics | ⬜ Pending |
+| 2 | Databricks Bronze → Silver | ✅ Complete |
+| 3 | dbt Gold layer — health metrics | 🔄 In Progress |
 | 4 | LangGraph agent — 5 step workflow | ⬜ Pending |
 | 5 | Streamlit UI | ⬜ Pending |
 | 6 | Polish, README, architecture diagram | ⬜ Pending |
@@ -166,6 +163,159 @@ s3://oss-risk-agent-bronze/github-archive/raw/{org}/{repo}/{date}/
 - [ ] `run_ingestion.py --dry-run` executes without errors
 - [ ] At least one project's events land in S3 in correct path
 - [ ] Logs show download → filter → upload flow clearly
+
+---
+
+## Phase 2 — Databricks Bronze → Silver
+
+**Goal:** Read raw JSON.gz files from S3 bronze layer into Databricks,
+flatten and clean the nested GitHub event structure, and write typed,
+deduplicated tables to the Silver layer in Databricks Unity Catalog.
+
+**Input:**
+- S3 path: `s3://oss-risk-agent-bronze/github-archive/raw/{org}/{repo}/{date}/`
+- Format: gzipped JSON, one event per line
+- Schema: nested GitHub event objects (type, actor, repo, payload, created_at)
+
+**Output:**
+- Databricks table: `workspace.default.silver_github_events`
+- Format: Delta table, partitioned by `event_date` and `repo_full_name`
+
+**Key GitHub Event Types to Capture:**
+
+| Event Type | What It Tells Us |
+|---|---|
+| `PushEvent` | Commit activity, contributor frequency |
+| `IssuesEvent` | Issue open/close rates, backlog health |
+| `PullRequestEvent` | PR merge time, review activity |
+| `IssueCommentEvent` | Community engagement, sentiment signal |
+| `WatchEvent` | Popularity momentum |
+| `ForkEvent` | Adoption signal |
+
+**Silver Table Schema:**
+```
+event_id          STRING       -- sha256 hash for deduplication
+event_type        STRING       -- PushEvent, IssuesEvent, etc.
+actor_login       STRING       -- GitHub username
+actor_id          LONG
+repo_full_name    STRING       -- org/repo
+repo_id           LONG
+created_at        TIMESTAMP
+event_date        DATE         -- partition key
+payload_action    STRING       -- opened, closed, merged, etc.
+payload_commits   INT          -- number of commits (PushEvent only)
+org_name          STRING       -- extracted from repo_full_name
+repo_name         STRING       -- extracted from repo_full_name
+ingested_at       TIMESTAMP    -- pipeline run timestamp
+```
+
+**Files to Build:**
+
+| File | Purpose |
+|---|---|
+| `transformation/databricks/notebooks/01_bronze_to_silver.py` | PySpark notebook: read S3, flatten, write Delta |
+| `transformation/databricks/notebooks/00_setup.py` | Creates catalog, schema, mounts if needed |
+| `transformation/databricks/jobs/silver_job_config.json` | Databricks job definition JSON |
+| `ingestion/utils/databricks_client.py` | Python client to trigger Databricks jobs via REST API |
+| `scripts/run_silver.py` | PowerShell entry point to trigger the job |
+
+**Key Requirements:**
+- Use `spark.read.json()` with schema inference disabled — enforce schema explicitly
+- Deduplicate on `event_id` (hash of event type + actor + repo + created_at)
+- Partition Delta table by `event_date` for query performance
+- Handle malformed JSON rows gracefully — log and skip, never fail
+- Write mode: `append` with Delta merge for idempotency
+- Auto-optimize and Z-order by `repo_full_name` for dbt query performance
+
+**Acceptance Criteria:**
+- [ ] `workspace.default.silver_github_events` table exists in Databricks
+- [ ] Table contains records for at least 1 project from S3
+- [ ] Schema matches specification above
+- [ ] Running the job twice produces no duplicate rows
+- [ ] Query in Databricks SQL Editor returns results:
+      `SELECT repo_full_name, COUNT(*) FROM workspace.default.silver_github_events GROUP BY 1 ORDER BY 2 DESC LIMIT 10`
+
+---
+
+## Phase 3 — dbt Gold Layer
+
+**Goal:** Connect dbt to Databricks, model the Silver table into a Gold
+layer of computed health metrics per project per month, and generate a
+visual lineage graph.
+
+**Input:**
+- Databricks table: `workspace.default.silver_github_events`
+
+**Output tables:**
+- `workspace.default.gold_project_health` — monthly health metrics per project
+- `workspace.default.gold_health_scores` — final composite score per project
+
+**dbt Project Structure:**
+```
+transformation/dbt/
+├── dbt_project.yml
+├── profiles.yml          ← gitignored, uses env vars
+├── packages.yml
+└── models/
+    ├── staging/
+    │   └── stg_github_events.sql
+    ├── intermediate/
+    │   ├── int_commit_activity.sql
+    │   ├── int_issue_health.sql
+    │   ├── int_pr_health.sql
+    │   └── int_contributor_diversity.sql
+    └── gold/
+        ├── gold_project_health.sql
+        └── gold_health_scores.sql
+```
+
+**Health Metrics to Compute (Gold Layer):**
+
+| Metric | Logic |
+|---|---|
+| `commit_frequency` | PushEvents per week, 90-day trend |
+| `issue_resolution_rate` | Closed issues / opened issues ratio |
+| `pr_merge_rate` | Merged PRs / opened PRs ratio |
+| `contributor_count` | Distinct actors, last 30 days |
+| `bus_factor_risk` | % commits from top 3 contributors |
+| `community_engagement` | Comments + reactions per issue |
+| `health_score` | Weighted composite 0-10 |
+| `health_trend` | MoM change in health_score |
+
+**Files to Build:**
+
+| File | Purpose |
+|---|---|
+| `transformation/dbt/dbt_project.yml` | dbt project config |
+| `transformation/dbt/profiles.yml` | Databricks connection (uses env vars) |
+| `transformation/dbt/packages.yml` | dbt packages (dbt-utils) |
+| `transformation/dbt/models/staging/stg_github_events.sql` | Cast and rename silver columns |
+| `transformation/dbt/models/intermediate/int_commit_activity.sql` | Commit frequency metrics |
+| `transformation/dbt/models/intermediate/int_issue_health.sql` | Issue resolution metrics |
+| `transformation/dbt/models/intermediate/int_pr_health.sql` | PR merge metrics |
+| `transformation/dbt/models/intermediate/int_contributor_diversity.sql` | Bus factor + contributor count |
+| `transformation/dbt/models/gold/gold_project_health.sql` | Join all intermediate models |
+| `transformation/dbt/models/gold/gold_health_scores.sql` | Final weighted composite score |
+| `transformation/dbt/models/staging/schema.yml` | Column descriptions + tests |
+| `transformation/dbt/models/gold/schema.yml` | Gold layer tests |
+| `scripts/run_dbt.py` | PowerShell entry point for dbt commands |
+
+**Key Requirements:**
+- Use `dbt-databricks` adapter
+- profiles.yml reads from environment variables — never hardcoded
+- Add `not_null` and `unique` tests on key columns
+- Add `accepted_values` test on event_type
+- health_score must be between 0 and 10
+- Models should be materialized as `table` in gold, `view` in staging
+- Include a `dbt source` definition for silver_github_events
+
+**Acceptance Criteria:**
+- [ ] `dbt debug` passes — connection to Databricks confirmed
+- [ ] `dbt run` completes with all models green
+- [ ] `dbt test` passes with zero failures
+- [ ] `dbt docs generate && dbt docs serve` shows lineage graph
+- [ ] `gold_health_scores` table exists in `workspace.default`
+- [ ] Health scores are between 0-10 for all projects
 
 ---
 
@@ -223,5 +373,129 @@ s3://oss-risk-agent-bronze/github-archive/raw/{org}/{repo}/{date}/
 - `S3_BRONZE_PREFIX` must end with `/` in `.env` or the key builder strips it
   correctly — confirmed in unit test but worth adding an explicit assertion.
 
+### Phase 2 — Complete
+**Files built:**
+- `transformation/databricks/notebooks/00_setup.py` — Databricks notebook that
+  configures S3 credentials (secrets scope with env var fallback), creates
+  `workspace.default` schema, tests S3 connectivity via `dbutils.fs.ls`, and
+  creates the silver Delta table DDL with `autoOptimize`/`autoCompact` enabled.
+  Accepts `reset_table` widget to drop/recreate during development.
+- `transformation/databricks/notebooks/01_bronze_to_silver.py` — Reads S3
+  JSON.gz with an explicit bronze schema (PERMISSIVE + `_corrupt_record`),
+  filters to 6 target event types, flattens nested structs, generates
+  `event_id = sha2(type|actor_login|repo|created_at, 256)`, casts timestamps,
+  extracts `org_name`/`repo_name`, MERGEs into silver Delta table (INSERT-only
+  on `event_id`). Emits row-count summary. Accepts `start_date`/`end_date`
+  widgets for incremental runs.
+- `transformation/databricks/jobs/silver_job_config.json` — Jobs API 2.1
+  definition: two tasks (setup -> bronze_to_silver), serverless compute
+  (`environments: client: "2"`), 2-hour task timeout, commented daily schedule.
+- `ingestion/utils/databricks_client.py` — `DatabricksClient` with lazy SDK
+  import (`from __future__ import annotations` + `_import_sdk()` deferred to
+  `__init__`), tenacity retry on uploads, `upload_all_notebooks()`,
+  `create_or_update_job()` (upsert by name), `trigger_run()`, `wait_for_run()`
+  (configurable poll/timeout), dry_run throughout.
+- `scripts/run_silver.py` — CLI with `--upload`, `--create-job`, `--trigger`,
+  `--wait`, `--start-date`, `--end-date`, `--dry-run`. Exits 0/1.
+
+**Key decisions:**
+- Databricks SDK imports are lazy so `--help` works without the package
+  installed. `from __future__ import annotations` required to defer type
+  annotation evaluation at class definition time.
+- PERMISSIVE read mode + `_corrupt_record` captures bad JSON lines without
+  crashing the pipeline. Corrupt rows are counted/sampled in logs then dropped.
+- `created_at` kept as raw string during sha2 hashing for stable event_id
+  regardless of downstream timestamp format changes.
+- MERGE uses SQL (`MERGE INTO ... WHEN NOT MATCHED THEN INSERT *`) rather than
+  DeltaTable Python API for notebook readability.
+- S3 access resolved via **Unity Catalog External Location** pointing to
+  `s3://oss-risk-agent-bronze/`. No Spark credential config required at runtime.
+  Notebooks retain the secret-scope credential block as a fallback for non-UC
+  contexts.
+- Databricks secret scope `oss-risk-agent` key names use **underscores**
+  (`aws_access_key_id`, `aws_secret_access_key`) — not hyphens. The original
+  hyphenated names caused silent `dbutils.secrets.get()` failures that fell
+  through to `AnonymousAWSCredentials` (S3 403 errors).
+- Workspace: `https://dbc-92208bf2-316f.cloud.databricks.com`
+- SQL Warehouse HTTP path: `/sql/1.0/warehouses/11bd1ba7445b1a22` (used by dbt)
+- Notebooks upload to `/Shared/oss-risk-agent/` by default.
+
+**Fixes applied post-initial-build:**
+- **Serverless `.cache()` incompatibility** — resolved. `01_bronze_to_silver.py`
+  now writes `df_silver` to a temp Delta table
+  (`workspace.default._silver_incoming_temp`, overwrite mode) and reassigns the
+  variable before the row count and MERGE. This materialises the S3 → transform
+  plan once instead of re-running it per Spark action. DROP TABLE cleanup was
+  removed — overwrite mode keeps the table fresh each run without triggering
+  lazy re-evaluation.
+- **S3 403 Forbidden** — resolved via Unity Catalog External Location (see above).
+
+**Still open:**
+- After initial backfill, run `OPTIMIZE workspace.default.silver_github_events ZORDER BY (repo_full_name)` manually.
+- `payload.commits` is counted only; individual commit authors not surfaced.
+
+### Dependency Housekeeping — Post Phase 2
+- `requirements.txt` split into two files:
+  - `requirements.txt` — packages needed to run the project locally
+  - `requirements-dev.txt` — testing/dev tooling only (`-r requirements.txt` at top)
+- Removed from `requirements.txt`: `databricks-connect` (Spark runs on Databricks,
+  not locally), `pyspark` (same reason), `prefect` (not used; `schedule` covers needs)
+- Install locally: `pip install -r requirements.txt`
+- Install for development: `pip install -r requirements-dev.txt`
+
+### Phase 3 — dbt Gold Layer (files built, pending first run)
+**Files built:**
+- `transformation/dbt/dbt_project.yml` — project config; staging/intermediate
+  materialized as `view`, gold as `table` (Delta).
+- `transformation/dbt/profiles.yml` — dbt-databricks adapter; reads
+  `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_HTTP_PATH`,
+  `DATABRICKS_CATALOG`, `DATABRICKS_SCHEMA` from env vars via `env_var()`.
+  Strips `https://` from host with Jinja filter. Gitignored.
+- `transformation/dbt/packages.yml` — `dbt-labs/dbt_utils >=1.0.0,<2.0.0`
+  (used for `accepted_range` tests on health scores).
+- `transformation/dbt/models/staging/stg_github_events.sql` — passthrough
+  view over `workspace.default.silver_github_events` via `source()`.
+- `transformation/dbt/models/staging/schema.yml` — source definition for
+  silver table (catalog/schema/table); `not_null`, `unique`, `accepted_values`
+  tests on stg model.
+- `transformation/dbt/models/intermediate/int_commit_activity.sql` — monthly
+  commit frequency per repo: `push_event_count`, `total_commits`,
+  `active_committers`, `active_days`, `commits_per_week`.
+- `transformation/dbt/models/intermediate/int_issue_health.sql` — monthly
+  `issues_opened`, `issues_closed`, `issue_resolution_rate` (closed/opened).
+- `transformation/dbt/models/intermediate/int_pr_health.sql` — monthly
+  `prs_opened`, `prs_closed`, `pr_merge_rate`. Note: `prs_closed` is a proxy
+  for merged PRs — Silver schema does not capture the `merged` boolean.
+- `transformation/dbt/models/intermediate/int_contributor_diversity.sql` —
+  monthly `contributor_count`, `top3_commits`, `bus_factor_risk`
+  (top-3 share of total commits; higher = more concentrated = riskier).
+- `transformation/dbt/models/gold/gold_project_health.sql` — wide join of
+  all four intermediate models on `(repo_full_name, event_month)`. Left joins
+  so every repo/month with any event type appears.
+- `transformation/dbt/models/gold/gold_health_scores.sql` — normalises each
+  signal to 0-10, applies weights, computes `health_score` and
+  `health_trend` (MoM delta via window function).
+- `transformation/dbt/models/gold/schema.yml` — `not_null` tests on keys;
+  `dbt_utils.accepted_range(0, 10)` on `health_score` and all component scores.
+- `scripts/run_dbt.py` — argparse CLI (`--deps`, `--debug`, `--run`,
+  `--test`, `--docs`, `--select`, `--full-refresh`). Always passes
+  `--profiles-dir .` so profiles.yml is found in the project directory.
+
+**Key decisions:**
+- `profiles.yml` is kept in `transformation/dbt/` (gitignored) and loaded via
+  `--profiles-dir .` in `run_dbt.py` — avoids polluting `~/.dbt/`.
+- `trunc(event_date, 'MM')` used throughout (returns DATE) instead of
+  `date_trunc` (returns TIMESTAMP) for consistent join keys.
+- `count_if(...)` used in issue/PR models — native Databricks SQL, cleaner
+  than `sum(case when ...)`.
+- Null metrics (no events of that type in the month) default to 5.0 (neutral)
+  in the scoring layer so a missing signal doesn't collapse the health score.
+- `generate_schema_name` macro NOT overridden — models land in `target.schema`
+  (`default`) with no prefix. If dbt adds `default_` prefix on your workspace,
+  add a `macros/generate_schema_name.sql` override.
+
+**Health score weights:** commit_frequency 25%, issue_resolution_rate 20%,
+pr_merge_rate 20%, contributor_count 20%, bus_factor_risk 15%.
+
 ---
-*Last updated: Phase 1 complete*
+*Last updated: Phase 3 files built — ready for `dbt deps && dbt run && dbt test`*

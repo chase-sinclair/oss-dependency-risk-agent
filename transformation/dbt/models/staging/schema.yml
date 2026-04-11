@@ -1,0 +1,64 @@
+version: 2
+
+sources:
+  - name: silver
+    description: "Silver layer Delta tables produced by the Databricks bronze->silver pipeline"
+    catalog: workspace
+    schema: default
+    tables:
+      - name: silver_github_events
+        description: >
+          Flattened, deduplicated GitHub Archive events. One row per unique
+          event (deduped on event_id = sha256 of type|actor|repo|created_at).
+          Partitioned by event_date.
+        columns:
+          - name: event_id
+            description: "SHA-256 deduplication key"
+            data_tests:
+              - not_null
+              - unique
+          - name: event_type
+            description: "GitHub event type (PushEvent, IssuesEvent, etc.)"
+            data_tests:
+              - not_null
+          - name: repo_full_name
+            description: "org/repo slug"
+            data_tests:
+              - not_null
+          - name: event_date
+            description: "Date partition key (UTC)"
+            data_tests:
+              - not_null
+
+models:
+  - name: stg_github_events
+    description: >
+      Passthrough view over silver_github_events. Provides the dbt source
+      abstraction so all downstream models reference a stable ref() rather
+      than a raw table name.
+    columns:
+      - name: event_id
+        description: "SHA-256 deduplication key"
+        data_tests:
+          - not_null
+          - unique
+      - name: event_type
+        description: "GitHub event type"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values:
+                - PushEvent
+                - IssuesEvent
+                - PullRequestEvent
+                - IssueCommentEvent
+                - WatchEvent
+                - ForkEvent
+      - name: repo_full_name
+        description: "org/repo slug"
+        data_tests:
+          - not_null
+      - name: event_date
+        description: "Event date (UTC)"
+        data_tests:
+          - not_null

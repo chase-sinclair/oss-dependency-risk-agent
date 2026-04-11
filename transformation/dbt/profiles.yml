@@ -1,0 +1,28 @@
+# profiles.yml — Databricks connection for dbt-databricks adapter
+#
+# All values are read from environment variables — never hardcode secrets here.
+# This file is gitignored.
+#
+# Required env vars:
+#   DATABRICKS_HOST      — workspace URL, e.g. https://dbc-xxx.cloud.databricks.com
+#   DATABRICKS_TOKEN     — personal access token
+#   DATABRICKS_HTTP_PATH — SQL warehouse path, e.g. /sql/1.0/warehouses/<id>
+#   DATABRICKS_CATALOG   — Unity Catalog catalog name (default: workspace)
+#   DATABRICKS_SCHEMA    — schema / database name    (default: default)
+#
+# Note: DATABRICKS_HOST may include the https:// prefix — the | replace filter
+# strips it so dbt receives only the hostname.
+
+oss_risk_agent:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      catalog:   "{{ env_var('DATABRICKS_CATALOG', 'workspace') }}"
+      schema:    "{{ env_var('DATABRICKS_SCHEMA',  'default') }}"
+      host:      "{{ env_var('DATABRICKS_HOST') | replace('https://', '') | replace('http://', '') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"
+      token:     "{{ env_var('DATABRICKS_TOKEN') }}"
+      threads: 4
+      connect_timeout: 60
+      connect_retries: 3

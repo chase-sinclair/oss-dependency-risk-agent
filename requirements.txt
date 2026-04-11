@@ -14,10 +14,6 @@ botocore>=1.35.0                   # AWS core (transitive, pinned for stability)
 
 # ── Databricks ────────────────────────────────────────────────────────────────
 databricks-sdk>=0.32.0             # Databricks workspace & jobs API
-databricks-connect>=15.1.0         # Remote PySpark execution against Databricks
-
-# ── PySpark ───────────────────────────────────────────────────────────────────
-pyspark>=3.5.0                     # Local PySpark (matches Databricks runtime)
 
 # ── dbt ───────────────────────────────────────────────────────────────────────
 dbt-core>=1.8.0                    # dbt transformation engine
@@ -43,21 +39,9 @@ httpx>=0.27.0                      # Async HTTP client (used by Anthropic SDK)
 requests>=2.32.0                   # Sync HTTP (GitHub API, GH Archive)
 tenacity>=9.0.0                    # Retry logic for API calls
 
-# ── Scheduling & Workflow ─────────────────────────────────────────────────────
+# ── Scheduling ────────────────────────────────────────────────────────────────
 schedule>=1.2.0                    # Lightweight Python job scheduling
-prefect>=3.0.0                     # Optional: workflow orchestration layer
 
 # ── Logging & Observability ───────────────────────────────────────────────────
 structlog>=24.4.0                  # Structured logging
 rich>=13.8.0                       # Pretty terminal output / logging
-
-# ── Testing ───────────────────────────────────────────────────────────────────
-pytest>=8.3.0                      # Test framework
-pytest-asyncio>=0.24.0             # Async test support
-pytest-cov>=5.0.0                  # Coverage reporting
-moto>=5.0.0                        # AWS service mocks for unit tests
-
-# ── Dev Tooling ───────────────────────────────────────────────────────────────
-ruff>=0.6.0                        # Linter + formatter
-mypy>=1.11.0                       # Static type checking
-pre-commit>=3.8.0                  # Git hook manager
