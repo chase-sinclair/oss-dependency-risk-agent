@@ -3,7 +3,17 @@
     "allow": [
       "Bash(python -c ':*)",
       "Bash(python scripts/run_ingestion.py --help)",
-      "Bash(python scripts/run_silver.py --help)"
+      "Bash(python scripts/run_silver.py --help)",
+      "Bash(.venv/Scripts/dbt --version)",
+      "Bash(DBT_PROFILES_DIR=$\\(pwd\\) ../../.venv/Scripts/dbt deps)",
+      "Bash(DBT_PROFILES_DIR=$\\(pwd\\) ../../.venv/Scripts/dbt debug)",
+      "Bash(.venv/Scripts/python scripts/run_dbt.py --deps)",
+      "Bash(.venv/Scripts/python scripts/run_dbt.py --debug)",
+      "Bash(.venv/Scripts/python scripts/run_dbt.py --run)",
+      "Bash(DBT_PROFILES_DIR=$\\(pwd\\) ../../.venv/Scripts/dbt.exe ls --no-partial-parse)",
+      "Bash(.venv/Scripts/python -c ':*)",
+      "Bash(.venv/Scripts/python scripts/run_dbt.py --test)",
+      "Bash(.venv/Scripts/python scripts/run_dbt.py --run --test)"
     ]
   }
 }

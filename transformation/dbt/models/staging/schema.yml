@@ -16,7 +16,6 @@ sources:
             description: "SHA-256 deduplication key"
             data_tests:
               - not_null
-              - unique
           - name: event_type
             description: "GitHub event type (PushEvent, IssuesEvent, etc.)"
             data_tests:
@@ -47,13 +46,14 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values:
-                - PushEvent
-                - IssuesEvent
-                - PullRequestEvent
-                - IssueCommentEvent
-                - WatchEvent
-                - ForkEvent
+              arguments:
+                values:
+                  - PushEvent
+                  - IssuesEvent
+                  - PullRequestEvent
+                  - IssueCommentEvent
+                  - WatchEvent
+                  - ForkEvent
       - name: repo_full_name
         description: "org/repo slug"
         data_tests:

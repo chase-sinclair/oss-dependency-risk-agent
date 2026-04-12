@@ -24,13 +24,13 @@ models:
       - name: contributor_count
         description: "Distinct committers in the month"
       - name: bus_factor_risk
-        description: "Fraction of commits from top-3 contributors (0–1). Higher = more concentrated."
+        description: "Fraction of commits from top-3 contributors (0-1). Higher = more concentrated."
       - name: computed_at
         description: "Timestamp when the dbt run completed"
 
   - name: gold_health_scores
     description: >
-      Composite health score (0–10) per project per month, derived from
+      Composite health score (0-10) per project per month, derived from
       weighted normalisation of the five core health signals.
       Includes month-over-month health_trend.
     columns:
@@ -43,41 +43,47 @@ models:
         data_tests:
           - not_null
       - name: health_score
-        description: "Weighted composite score, 0–10"
+        description: "Weighted composite score, 0-10"
         data_tests:
           - not_null
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 10
+              arguments:
+                min_value: 0
+                max_value: 10
       - name: health_trend
         description: "Month-over-month change in health_score. Null for first observed month."
       - name: commit_score
-        description: "Normalised commit frequency component, 0–10"
+        description: "Normalised commit frequency component, 0-10"
         data_tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 10
+              arguments:
+                min_value: 0
+                max_value: 10
       - name: issue_score
-        description: "Normalised issue resolution component, 0–10"
+        description: "Normalised issue resolution component, 0-10"
         data_tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 10
+              arguments:
+                min_value: 0
+                max_value: 10
       - name: pr_score
-        description: "Normalised PR merge rate component, 0–10"
+        description: "Normalised PR merge rate component, 0-10"
         data_tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 10
+              arguments:
+                min_value: 0
+                max_value: 10
       - name: contributor_score
-        description: "Normalised contributor diversity component, 0–10"
+        description: "Normalised contributor diversity component, 0-10"
         data_tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 10
+              arguments:
+                min_value: 0
+                max_value: 10
       - name: bus_factor_score
-        description: "Normalised (inverted) bus factor component, 0–10"
+        description: "Normalised (inverted) bus factor component, 0-10"
         data_tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 10
+              arguments:
+                min_value: 0
+                max_value: 10

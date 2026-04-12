@@ -22,6 +22,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Resolve dbt.exe from the same Scripts/ directory as the active Python
+# interpreter so the correct venv installation is used regardless of PATH.
+_DBT_EXE = str(Path(sys.executable).parent / "dbt")
+_DBT_CMD = [_DBT_EXE]
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -42,12 +47,17 @@ def _run_dbt(args: list[str]) -> int:
 
     Streams stdout/stderr directly to the terminal so dbt's colour output
     and progress indicators are preserved.  Returns the process exit code.
+
+    DBT_PROFILES_DIR is injected via the subprocess environment rather than
+    the --profiles-dir CLI flag, which has moved between dbt versions and
+    behaves differently as a global vs. per-subcommand option.
     """
-    # --profiles-dir . tells dbt to load profiles.yml from the project
-    # directory (transformation/dbt/) rather than the default ~/.dbt/
-    cmd = ["dbt", "--profiles-dir", "."] + args
-    logger.info("Running: %s  (cwd=%s)", " ".join(cmd), _DBT_PROJECT_DIR)
-    result = subprocess.run(cmd, cwd=str(_DBT_PROJECT_DIR))
+    cmd = _DBT_CMD + args
+    env = {**os.environ, "DBT_PROFILES_DIR": str(_DBT_PROJECT_DIR)}
+    logger.info(
+        "Running: python -m dbt %s  (cwd=%s)", " ".join(args), _DBT_PROJECT_DIR
+    )
+    result = subprocess.run(cmd, cwd=str(_DBT_PROJECT_DIR), env=env)
     return result.returncode
 
 

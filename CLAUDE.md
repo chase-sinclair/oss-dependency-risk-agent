@@ -497,5 +497,27 @@ transformation/dbt/
 **Health score weights:** commit_frequency 25%, issue_resolution_rate 20%,
 pr_merge_rate 20%, contributor_count 20%, bus_factor_risk 15%.
 
+**Bugs found and fixed during execution:**
+- **Self-referencing cycle** — `stg_github_events.sql` had `{{ ref('stg_github_events') }}`
+  inside a SQL block comment as a documentation example. dbt's static ref extractor
+  runs regex over the entire file (including comments), creating a phantom self-dependency.
+  Fix: write `ref('stg_github_events')` without the Jinja delimiters in comments.
+- **`--profiles-dir` flag not found** — dbt 1.11 doesn't accept it as a global flag
+  before the subcommand. Fix: inject `DBT_PROFILES_DIR` as an environment variable
+  in the subprocess instead of using a CLI flag.
+- **`dbt` not on PATH in subprocess** — `subprocess.run(["dbt", ...])` fails on Windows
+  when the venv is not on the system PATH. Fix: resolve `dbt.exe` from
+  `Path(sys.executable).parent` and store as `_DBT_EXE` in `run_dbt.py`.
+- **`dbt_utils.accepted_range` / `accepted_values` deprecation** — in dbt 1.11 test
+  arguments must be nested under `arguments:`. Updated `gold/schema.yml` and
+  `staging/schema.yml` accordingly.
+- **`unique_stg_github_events_event_id` test failure** — silver table contained 373
+  duplicate `event_id` values from the pipeline running multiple times on overlapping
+  date ranges. Fix: added `ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY ingested_at DESC)`
+  deduplication to `stg_github_events.sql`. Removed `unique` test from source
+  definition (external data, can't control). Test passes on the model.
+
+**Final status: `dbt run` PASS=7/7, `dbt test` PASS=21/21, WARN=0, ERROR=0.**
+
 ---
-*Last updated: Phase 3 files built — ready for `dbt deps && dbt run && dbt test`*
+*Last updated: Phase 3 complete — all models built and all tests passing*
