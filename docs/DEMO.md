@@ -1,0 +1,266 @@
+# Interview Demo Script — OSS Dependency Risk Agent
+
+> **Format:** 5-minute live demo + Q&A.
+> Read this script aloud before your interview. The questions after each
+> section are real things interviewers ask — the answers below are the ones
+> that demonstrate genuine depth, not just surface familiarity.
+
+---
+
+## Setup (Before the Interview)
+
+1. Start the Streamlit app: `streamlit run frontend\app.py`
+2. Have a terminal open with the repo root as working directory
+3. Have `.env` loaded (app reads it automatically)
+4. Open `docs/reports/risk_report_2026-04-12T19-36-29.md` in a text editor
+5. Keep `docs/architecture.md` open as a reference tab
+
+---
+
+## Opening Line (30 seconds)
+
+> "I built an end-to-end AI system that monitors 200 open-source projects for
+> health deterioration. It ingests GitHub Archive event data into S3, processes
+> it through Databricks and dbt to compute health scores, and then an autonomous
+> LangGraph agent detects the projects that are at risk, fetches live GitHub
+> signals, and calls Claude to generate structured REPLACE / UPGRADE / MONITOR
+> recommendations. Let me show you the live app."
+
+---
+
+## Page 1 — Home (45 seconds)
+
+**What to show:**
+- Point to the 5 summary metrics at the top (total projects, critical count, average score)
+- Scroll to the Top 5 Most At-Risk list — mention actual score numbers
+- Point to the bar chart showing the lowest-scoring projects
+
+**What to say:**
+> "This is the home page — it shows the state of all 200 projects at a glance.
+> We currently have X projects in the critical band below 5.0. The bar chart
+> here is pulling live from Databricks gold_health_scores, cached for 5 minutes.
+> The color coding is deliberate — green above 7, yellow 5 to 7, red below 5."
+
+---
+
+### Q&A — Home Page
+
+**Q: Why 200 projects? How did you choose them?**
+> "I curated them across 10 categories — data/ML, AI tooling, infrastructure,
+> web frameworks, databases, dev tooling, security, observability, messaging,
+> and CI/CD. The goal was breadth across the dependency graph of a typical
+> mid-to-large engineering org. In a production version, the list would come
+> from a company's actual dependency manifest — a `requirements.txt` or
+> `package.json` scan."
+
+**Q: What does the health score actually measure?**
+> "It's a weighted composite of 6 signals on a 0-10 scale. Commit frequency
+> gets the most weight at 25% because it's the most direct indicator of active
+> maintenance. Issue resolution rate and PR merge rate are 20% each — they tell
+> you whether maintainers are responsive. Contributor diversity is 20%, and bus
+> factor — how concentrated commits are across contributors — is 15%. All of
+> these come from GitHub event data processed through the dbt gold layer."
+
+---
+
+## Page 2 — Health Dashboard (60 seconds)
+
+**What to show:**
+- The full sortable table of projects with color-coded health scores
+- Use the sidebar org filter to narrow to a specific org (e.g. "apache")
+- Use the min score slider to show only projects below 6.0
+- Point to the bar chart updating to match the filter
+
+**What to say:**
+> "The Health Dashboard shows all 200 projects. I can filter by organisation —
+> let me pull up just the Apache projects. You can see some healthy scores like
+> Airflow and Spark, and some that are trending lower. The table has conditional
+> formatting applied through pandas Styler — green, yellow, red matching the
+> threshold logic throughout the whole app."
+
+---
+
+### Q&A — Health Dashboard
+
+**Q: How fresh is this data?**
+> "The Streamlit queries are cached for 5 minutes. The underlying gold table is
+> updated whenever the dbt pipeline runs — in a production setup that would be a
+> daily Databricks Workflow. The GitHub Archive itself publishes hourly, so the
+> theoretical freshness ceiling is about one hour lag."
+
+**Q: What would you do differently if you had more time on the data model?**
+> "The biggest gap is that `prs_closed` is a proxy for merged PRs because the
+> GitHub Archive PullRequestEvent payload doesn't consistently include the
+> `merged` boolean. I'd add a secondary API call to the GitHub REST endpoint to
+> backfill the merge status for closed PRs. I'd also add community engagement
+> as a signal — reactions and comment sentiment on issues — which is in the
+> architecture spec but not yet implemented."
+
+---
+
+## Page 3 — Project Detail (60 seconds)
+
+**What to show:**
+- Select a project from the sidebar — choose one the agent assessed
+  (e.g. `lancedb/lance` or `open-telemetry/opentelemetry-collector`)
+- Point to the score breakdown with progress bars
+- Point to the AI risk assessment at the bottom if the agent has run
+
+**What to say:**
+> "Project Detail lets you drill into any project. Here's lancedb/lance —
+> you can see the breakdown across all 6 signals. The bus factor score is
+> particularly low here, meaning a small number of contributors are responsible
+> for most commits. The AI risk assessment below was generated by Claude and
+> is pulled directly from the most recent report file — no separate database
+> needed, the report file is the system of record."
+
+---
+
+### Q&A — Project Detail
+
+**Q: How does Claude generate the risk assessment?**
+> "I send Claude a structured prompt with two sections. First, a Markdown table
+> of the 6 quantitative health scores. Second, live GitHub signals I fetched
+> just before calling Claude — the top 5 open issues with their label and
+> comment counts, and the 3 most recent open PRs. The system prompt instructs
+> Claude to play the role of an OSS risk analyst and produce exactly 3 bullets:
+> the primary risk signal, any mitigating factors, and a concrete recommended
+> action. The exact-3-bullet constraint is important — it makes the output
+> parseable and consistent across projects."
+
+**Q: What happens when GitHub rate-limits you?**
+> "The GitHub fetch tool uses tenacity with exponential back-off — 3 attempts,
+> 2 to 10 second delays. If it still fails after 3 tries, the investigate node
+> stores an error dict in state rather than crashing. The synthesize node checks
+> for that error key and skips the Claude call for that project, logging a
+> warning. The recommendation defaults to MONITOR rather than producing a
+> misleading assessment."
+
+---
+
+## Page 4 — Run Agent (60 seconds)
+
+**What to show:**
+- Show the sidebar options: dry-run checkbox, project limit selector
+- Set limit to 3, keep dry-run off (or on if you want to demo without writing)
+- Click Run Agent and let the live log stream play out
+- Point to the MONITOR → INVESTIGATE → SYNTHESIZE → DELIVER log lines
+
+**What to say:**
+> "This page triggers the full 5-node LangGraph pipeline. I'm setting a limit
+> of 3 projects to keep the demo snappy. Watch the live output — you can see
+> each node executing in sequence. The log streaming works by spawning
+> run_agent.py as a subprocess and reading stdout line-by-line into a Queue on
+> a background thread. The main thread drains the queue and updates a
+> st.empty() container. This keeps Streamlit's event loop clean and prevents
+> LangGraph's internal threading from conflicting with Streamlit's script
+> reruns."
+
+---
+
+### Q&A — Run Agent
+
+**Q: Why LangGraph instead of just chaining function calls?**
+> "Two reasons. First, the graph is inspectable — I can call `.get_graph()`
+> and visualise the node/edge structure, which is useful for debugging and for
+> showing stakeholders what the agent actually does. Second, the TypedDict state
+> schema makes it impossible to silently pass the wrong type between nodes.
+> When you chain bare function calls, any dict key can be mistyped and the error
+> surfaces two nodes later. With LangGraph state, the error surfaces immediately
+> at the return boundary."
+
+**Q: How would you make the agent more reliable in production?**
+> "Three things. First, parallelise the investigate and synthesize nodes —
+> right now they process projects serially, which is slow for large flagged
+> lists. I'd use `asyncio` or a `ThreadPoolExecutor` since the GitHub and Claude
+> calls are all I/O bound. Second, add a confidence score to the Claude output
+> using structured JSON response format — low confidence triggers a second-pass
+> investigation with broader context. Third, add circuit breakers on the
+> Databricks query — if the gold table hasn't been updated in 24 hours, alert
+> rather than surfacing stale data as current."
+
+**Q: Why subprocess streaming instead of calling run_agent() directly in Streamlit?**
+> "Streamlit reruns the entire script on every interaction. If I called
+> run_agent() inline, LangGraph's internal threading would interfere with
+> Streamlit's rerun model and the logging output would mix with Streamlit's
+> own logs. The subprocess boundary cleanly separates the two runtimes. It
+> also means the agent run survives a Streamlit session refresh — the process
+> keeps running even if the user navigates away."
+
+---
+
+## Page 5 — Reports (30 seconds)
+
+**What to show:**
+- Select the most recent report from the dropdown
+- Toggle between Rendered and Raw Markdown views
+- Click the Download button
+
+**What to say:**
+> "The Reports page lists every report generated by the agent. I can switch
+> between the rendered view and raw Markdown — useful for copy-pasting into a
+> Jira ticket or Slack message. The download button makes it easy to share.
+> The deliver node names files with ISO timestamps and uses hyphens instead of
+> colons so the filenames are valid on Windows."
+
+---
+
+### Q&A — Reports
+
+**Q: Where would this go in a real company's workflow?**
+> "The deliver node already has the structure for a Slack integration — the
+> dry_run flag was designed so the report text lands in state and can be passed
+> to any delivery mechanism without re-running the agent. In practice I'd add
+> a Slack webhook call in deliver.py when action is REPLACE, post to a
+> `#dependency-alerts` channel, and tag the team's platform engineer. The
+> Markdown report would be stored in S3 for audit trail rather than the local
+> filesystem."
+
+---
+
+## Closing (30 seconds)
+
+> "The whole pipeline — from raw GitHub Archive bytes to AI-generated risk
+> assessment — runs in a single CLI command. The data engineering stack is
+> production-grade: deduplication with Delta MERGE, dbt tests on every model,
+> retry logic on every external call. The AI layer is deliberately narrow —
+> Claude's job is synthesis, not data collection. The quantitative signals do
+> the heavy lifting; Claude explains them to a human who needs to act."
+
+---
+
+## Hard Questions to Be Ready For
+
+**Q: What's the biggest thing that could go wrong in production?**
+> "Stale gold table data. If the dbt pipeline fails silently, the agent
+> keeps running against old scores and the assessments look current but aren't.
+> I'd add a data freshness check in the monitor node — if `MAX(event_month)`
+> is more than 2 days ago, the agent raises an alert rather than proceeding."
+
+**Q: How do you know Claude's assessments are accurate?**
+> "I don't, entirely — and that's by design. The system prompt explicitly
+> instructs Claude not to speculate beyond what the data shows, and to flag when
+> a signal is missing rather than guessing. The quantitative signals are the
+> ground truth; Claude's role is to translate them into language an engineering
+> lead can act on. The REPLACE / UPGRADE / MONITOR action comes from the numeric
+> risk_score, not from Claude — so the recommendation logic is deterministic
+> and auditable even if the prose reasoning is probabilistic."
+
+**Q: How would you scale this to 10,000 projects?**
+> "Three changes. First, partition the Silver table by category in addition to
+> event_date — dbt intermediate queries currently do full table scans on
+> event_type. Second, parallelise the Bronze ingestion with a thread pool or
+> Spark job rather than sequential hour-file processing. Third, run the agent
+> on a schedule with project batches rather than all-at-once — process the
+> lowest-scoring 50 projects each night and rotate through the full list weekly.
+> The LangGraph graph already supports a project_limit parameter for exactly
+> this reason."
+
+**Q: Why Databricks instead of a simpler solution like DuckDB or Pandas?**
+> "For the portfolio's goals, Databricks demonstrates scale-readiness — the
+> same PySpark code that processes 200 projects handles 200,000. DuckDB would
+> have been faster to set up and perfectly adequate for 200 projects locally,
+> but it wouldn't show that I understand Unity Catalog, Delta Lake MERGE
+> semantics, or Databricks job orchestration. The target companies for these
+> roles run Databricks at scale; the tool choice is a signal about where I'm
+> aiming."
