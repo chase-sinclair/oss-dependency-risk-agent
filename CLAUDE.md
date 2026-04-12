@@ -114,7 +114,7 @@ the full list. Key variables:
 | 0 | Environment setup, scaffold, credentials | ✅ Complete |
 | 1 | GitHub Archive → S3 ingestion | ✅ Complete |
 | 2 | Databricks Bronze → Silver | ✅ Complete |
-| 3 | dbt Gold layer — health metrics | 🔄 In Progress |
+| 3 | dbt Gold layer — health metrics | ✅ Complete |
 | 4 | LangGraph agent — 5 step workflow | ⬜ Pending |
 | 5 | Streamlit UI | ⬜ Pending |
 | 6 | Polish, README, architecture diagram | ⬜ Pending |
@@ -316,6 +316,70 @@ transformation/dbt/
 - [ ] `dbt docs generate && dbt docs serve` shows lineage graph
 - [ ] `gold_health_scores` table exists in `workspace.default`
 - [ ] Health scores are between 0-10 for all projects
+
+---
+
+## Phase 4 — LangGraph Agent
+
+**Goal:** Build a five-step autonomous agent using LangGraph that monitors
+gold_health_scores, detects deteriorating projects, investigates signals,
+synthesizes risk assessments, and delivers alerts.
+
+**Agent Steps:**
+
+| Step | Node Name | What It Does |
+|---|---|---|
+| 1 | `monitor` | Queries gold_health_scores, flags projects below threshold |
+| 2 | `investigate` | Fetches recent GitHub issues/PRs for flagged projects |
+| 3 | `synthesize` | Calls Claude API to generate risk assessment |
+| 4 | `recommend` | Produces structured recommendations (upgrade/replace/monitor) |
+| 5 | `deliver` | Writes report to file, optionally posts to Slack |
+
+**Agent State Schema:**
+```python
+class AgentState(TypedDict):
+    flagged_projects: list[dict]
+    investigation_results: dict
+    risk_assessments: dict
+    recommendations: dict
+    report: str
+    run_timestamp: str
+```
+
+**Files to Build:**
+
+| File | Purpose |
+|---|---|
+| `agent/graphs/risk_agent.py` | Main LangGraph graph definition |
+| `agent/nodes/monitor.py` | Queries Databricks gold table |
+| `agent/nodes/investigate.py` | GitHub API calls for flagged projects |
+| `agent/nodes/synthesize.py` | Claude API risk assessment generation |
+| `agent/nodes/recommend.py` | Structured recommendation logic |
+| `agent/nodes/deliver.py` | Report writing and delivery |
+| `agent/tools/databricks_query.py` | Tool to query Databricks SQL |
+| `agent/tools/github_fetch.py` | Tool to fetch GitHub issues/PRs |
+| `agent/prompts/risk_assessment.py` | Prompt templates for Claude |
+| `scripts/run_agent.py` | PowerShell entry point |
+
+**Key Requirements:**
+- Use LangGraph `StateGraph` with typed state
+- LANGGRAPH_RECURSION_LIMIT=50 from env vars
+- AGENT_MAX_RETRIES=3 from env vars
+- RISK_SCORE_THRESHOLD=0.65 from env vars
+- Monitor node flags projects where health_score < 6.0
+- Investigate node fetches last 10 open issues per project
+- Synthesize node generates 3-bullet risk summary per project
+- Recommend node outputs one of: UPGRADE, REPLACE, MONITOR, HEALTHY
+- Deliver node writes markdown report to docs/reports/
+- Include --dry-run flag that runs full agent but skips delivery
+- Loop limit: max 3 investigation retries per project
+
+**Acceptance Criteria:**
+- [ ] `python scripts\run_agent.py --dry-run` completes without errors
+- [ ] Agent correctly flags projects with health_score < 6.0
+- [ ] Risk assessment generated for each flagged project
+- [ ] Markdown report written to docs/reports/
+- [ ] Graph visualization available via LangGraph
 
 ---
 
@@ -521,3 +585,5 @@ pr_merge_rate 20%, contributor_count 20%, bus_factor_risk 15%.
 
 ---
 *Last updated: Phase 3 complete — all models built and all tests passing*
+
+---
