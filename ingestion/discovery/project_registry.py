@@ -165,16 +165,22 @@ def add_projects(
     all_discovered = existing_discovered + to_add
     new_block = _build_discovered_block(all_discovered)
 
-    # Replace existing discovered block or append a new one
+    # Remove any existing _DISCOVERED block (wherever it is in the file)
     if _DISCOVERED_HEADER in text:
         text = re.sub(
-            rf"{re.escape(_DISCOVERED_HEADER)}.*",
-            new_block.lstrip("\n"),
+            rf"\n*{re.escape(_DISCOVERED_HEADER)}.*?(?=\n# ──|\nPROJECTS|\Z)",
+            "",
             text,
             flags=re.DOTALL,
         )
+
+    # Insert the block immediately before the master list comment
+    master_marker = "# ── Master list"
+    if master_marker in text:
+        text = text.replace(master_marker, new_block.lstrip("\n") + "\n" + master_marker)
     else:
-        text = text.rstrip() + new_block
+        # Fallback: prepend before PROJECTS definition
+        text = text.replace("PROJECTS:", new_block.lstrip("\n") + "\nPROJECTS:")
 
     text = _ensure_projects_merge(text)
     _PROJECT_LIST_PATH.write_text(text, encoding="utf-8")

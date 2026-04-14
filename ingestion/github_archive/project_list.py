@@ -262,6 +262,13 @@ _CICD: list[Project] = [
 ]
 
 
+# ── Discovered (auto-generated) ──
+_DISCOVERED: list[Project] = [
+    {"org": "fastapi", "repo": "sqlmodel", "category": "discovered", "description": "Discovered from manifest (python package: sqlalchemy)"},
+    {"org": "redis", "repo": "redis-py", "category": "discovered", "description": "Discovered from manifest (python package: redis)"},
+    {"org": "boto", "repo": "boto3", "category": "discovered", "description": "Discovered from manifest (python package: boto3)"}
+]
+
 # ── Master list ───────────────────────────────────────────────────────────────
 PROJECTS: list[Project] = (
     _DATA_ML
@@ -274,6 +281,7 @@ PROJECTS: list[Project] = (
     + _OBSERVABILITY
     + _MESSAGING
     + _CICD
+    + _DISCOVERED
 )
 
 

@@ -24,6 +24,56 @@ Monitors 200 OSS projects for health deterioration: GitHub Archive events → AW
 
 ---
 
+## Phase 8 — Dependency Discovery (Complete)
+**Files built:**
+- `ingestion/discovery/__init__.py` — Package stub.
+- `ingestion/discovery/manifest_parser.py` — Parses 5 ecosystems: `requirements.txt`
+  (pip), `package.json` (npm), `go.mod`, `pom.xml` (Maven), `Cargo.toml` (Rust).
+  Detection order: exact filename → file extension suffix (`.txt`, `.json`, `.xml`).
+  This allows non-standard names like `test_requirements.txt` or `base.txt` to
+  resolve correctly via the `.txt` suffix fallback.
+- `ingestion/discovery/github_resolver.py` — Three-tier resolution per package:
+  (1) hardcoded `_KNOWN_MAPPINGS` dict (highest priority, no API call),
+  (2) ecosystem-native registry API (PyPI → `project_urls`, npm → `repository.url`,
+  crates.io, Go module path parsing with `golang.org/x/` / `k8s.io/` remaps),
+  (3) GitHub Search fallback (confidence: low, rate-limited to 2.5s between calls).
+  Results cached in `config/resolution_cache.json`. Lookup is case-insensitive.
+- `ingestion/discovery/project_registry.py` — Manages a `_DISCOVERED` block at
+  the bottom of `project_list.py`, kept separate from curated lists. Auto-patches
+  the `PROJECTS` concatenation to include `_DISCOVERED`. Supports add, list, remove.
+  Path fix: uses `parents[1]` (the `ingestion/` directory) not `parents[2]`.
+- `scripts/discover_dependencies.py` — CLI with `--manifest FILE` (repeatable),
+  `--dry-run`, `--list`, `--remove ORG/REPO`, `--debug`. Prints resolution summary
+  matching spec output. Unresolved packages appended to `docs/unresolved.txt`.
+
+**Known-correct mapping dict** (bypasses all API calls):
+```
+pinecone    -> pinecone-io/pinecone-python-client
+pandas      -> pandas-dev/pandas
+numpy       -> numpy/numpy
+scipy       -> scipy/scipy
+matplotlib  -> matplotlib/matplotlib
+sqlalchemy  -> sqlalchemy/sqlalchemy
+fastapi     -> tiangolo/fastapi
+celery      -> celery/celery
+redis       -> redis/redis-py
+httpx       -> encode/httpx
+pytest      -> pytest-dev/pytest
+openai      -> openai/openai-python
+```
+
+**Bugs fixed during build:**
+- `parents[2]` in `project_registry.py` resolved to project root, skipping
+  `ingestion/`. Fixed to `parents[1]`.
+- `\d` in `discover_dependencies.py` docstring raised `SyntaxWarning` (invalid
+  escape sequence in Python 3.12+). Fixed by using forward slashes in usage examples.
+- Exact filename match rejected `test_requirements.txt`. Fixed by adding suffix
+  fallback (`.txt` → pip parser) after exact match fails.
+- Cache must be cleared (`config/resolution_cache.json`) if known-correct mappings
+  are added after a bad resolution was already cached.
+
+---
+
 ## Phase 7 — Pinecone RAG Layer (Complete)
 **Files built:**
 - `embeddings/indexer.py` — Parses `docs/reports/risk_report_*.md` by splitting on
@@ -113,6 +163,7 @@ These caused real bugs and will again if forgotten:
 | 5 | Streamlit UI | ✅ Complete |
 | 6 | Polish, README, architecture diagram | ✅ Complete |
 | 7 | Pinecone RAG layer + daily pipeline | ✅ Complete |
+| 8 | Dependency discovery from manifests | ✅ Complete |
 
 ## Phase 7 — Pinecone RAG Layer
 
