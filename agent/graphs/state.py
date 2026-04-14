@@ -22,3 +22,5 @@ class AgentState(TypedDict):
     # CLI / invocation options (not part of the CLAUDE.md spec but needed at runtime)
     dry_run: NotRequired[bool]            # skip file write in deliver
     project_limit: NotRequired[int | None]  # cap flagged list in monitor
+    min_score: NotRequired[float | None]  # lower bound for health_score filter
+    max_score: NotRequired[float | None]  # upper bound for health_score filter

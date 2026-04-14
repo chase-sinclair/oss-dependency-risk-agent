@@ -55,6 +55,8 @@ def build_graph() -> StateGraph:
 def run_agent(
     dry_run: bool = False,
     project_limit: int | None = None,
+    min_score: float | None = None,
+    max_score: float | None = None,
 ) -> AgentState:
     """
     Build and invoke the risk agent graph.
@@ -62,6 +64,9 @@ def run_agent(
     Args:
         dry_run:       If True, skip writing the report file.
         project_limit: Cap the number of projects investigated (None = no cap).
+        min_score:     Only flag projects with health_score >= min_score.
+        max_score:     Only flag projects with health_score < max_score.
+                       When neither bound is set, defaults to health_score < 6.0.
 
     Returns:
         Final AgentState after all nodes have run.
@@ -77,6 +82,8 @@ def run_agent(
         "run_timestamp":         "",
         "dry_run":               dry_run,
         "project_limit":         project_limit,
+        "min_score":             min_score,
+        "max_score":             max_score,
     }
 
     logger.info(

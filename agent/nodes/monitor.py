@@ -18,10 +18,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Projects whose health score is below this threshold are flagged for investigation.
-_HEALTH_SCORE_THRESHOLD = float(os.environ.get("HEALTH_SCORE_THRESHOLD", "6.0"))
+# Default upper bound when no score flags are provided.
+_DEFAULT_MAX_SCORE = float(os.environ.get("HEALTH_SCORE_THRESHOLD", "6.0"))
 
-_SQL = """
+_SQL_BASE = """
 SELECT
     repo_full_name,
     health_score,
@@ -35,14 +35,50 @@ SELECT
 FROM {catalog}.{schema}.gold_health_scores
 WHERE
     health_score IS NOT NULL
-    AND CAST(health_score AS DOUBLE) < {threshold}
+    {filters}
 ORDER BY CAST(health_score AS DOUBLE) ASC
 """
 
 
+def _build_sql(catalog: str, schema: str, min_score: float | None, max_score: float | None) -> tuple[str, str]:
+    """
+    Build the SQL query and a human-readable description of the active filters.
+
+    Returns:
+        (sql, description) tuple.
+    """
+    clauses = []
+
+    if min_score is not None:
+        clauses.append(f"AND CAST(health_score AS DOUBLE) >= {min_score}")
+    if max_score is not None:
+        clauses.append(f"AND CAST(health_score AS DOUBLE) < {max_score}")
+
+    # Default: flag projects below the standard threshold
+    if not clauses:
+        clauses.append(f"AND CAST(health_score AS DOUBLE) < {_DEFAULT_MAX_SCORE}")
+
+    filters = "\n    ".join(clauses)
+    sql = _SQL_BASE.format(catalog=catalog, schema=schema, filters=filters)
+
+    parts = []
+    if min_score is not None:
+        parts.append(f"min={min_score}")
+    if max_score is not None:
+        parts.append(f"max={max_score}")
+    if not parts:
+        parts.append(f"default threshold < {_DEFAULT_MAX_SCORE}")
+    description = ", ".join(parts)
+
+    return sql, description
+
+
 def monitor(state: AgentState) -> dict:
     """
-    Query gold_health_scores and return projects that fall below the threshold.
+    Query gold_health_scores and return projects matching the score range.
+
+    Score range is controlled by state fields min_score and max_score.
+    When neither is set, falls back to the default threshold (health_score < 6.0).
 
     Returns:
         Dict with keys: flagged_projects, run_timestamp.
@@ -52,15 +88,12 @@ def monitor(state: AgentState) -> dict:
     catalog = os.environ.get("DATABRICKS_CATALOG", "workspace")
     schema = os.environ.get("DATABRICKS_SCHEMA", "default")
 
-    sql = _SQL.format(
-        catalog=catalog,
-        schema=schema,
-        threshold=_HEALTH_SCORE_THRESHOLD,
-    )
+    min_score: float | None = state.get("min_score")
+    max_score: float | None = state.get("max_score")
 
-    logger.info(
-        "monitor: querying gold_health_scores (threshold=%.1f)", _HEALTH_SCORE_THRESHOLD
-    )
+    sql, description = _build_sql(catalog, schema, min_score, max_score)
+
+    logger.info("monitor: querying gold_health_scores (%s)", description)
 
     try:
         rows = query_databricks(sql)

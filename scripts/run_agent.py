@@ -65,6 +65,20 @@ def _parse_args() -> argparse.Namespace:
         metavar="N",
         help="Cap the number of flagged projects processed.",
     )
+    parser.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        metavar="SCORE",
+        help="Only flag projects with health_score >= SCORE.",
+    )
+    parser.add_argument(
+        "--max-score",
+        type=float,
+        default=None,
+        metavar="SCORE",
+        help="Only flag projects with health_score < SCORE.",
+    )
     return parser.parse_args()
 
 
@@ -75,8 +89,8 @@ def main() -> int:
         return 1
 
     logger.info(
-        "Starting OSS Risk Agent (dry_run=%s, limit=%s)",
-        args.dry_run, args.limit,
+        "Starting OSS Risk Agent (dry_run=%s, limit=%s, min_score=%s, max_score=%s)",
+        args.dry_run, args.limit, args.min_score, args.max_score,
     )
 
     from agent.graphs.risk_agent import run_agent
@@ -85,6 +99,8 @@ def main() -> int:
         final_state = run_agent(
             dry_run=args.dry_run,
             project_limit=args.limit,
+            min_score=args.min_score,
+            max_score=args.max_score,
         )
     except Exception as exc:
         logger.exception("Agent run failed: %s", exc)

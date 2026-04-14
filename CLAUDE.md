@@ -24,6 +24,61 @@ Monitors 200 OSS projects for health deterioration: GitHub Archive events → AW
 
 ---
 
+## Phase 7 — Pinecone RAG Layer (Complete)
+**Files built:**
+- `embeddings/indexer.py` — Parses `docs/reports/risk_report_*.md` by splitting on
+  `## Section` then `### org/repo` headers. Extracts health score, risk score,
+  recommendation, and assessment text per project. Embeds with Pinecone's hosted
+  `llama-text-embed-v2` (input_type: `passage`). Upserts in batches of 50 to the
+  `oss-health` index, namespace `oss-deps`. Vector ID is
+  `sha256(repo_full_name|report_file)[:40]` for idempotent re-indexing.
+  `_get_or_create_index()` auto-creates the index (dim=1024, cosine, serverless
+  AWS us-east-1) if it doesn't exist — handles expired trials or fresh setups.
+  Empty assessment text falls back to a metadata-based sentence rather than
+  skipping the record entirely.
+- `embeddings/searcher.py` — Embeds query with `llama-text-embed-v2`
+  (input_type: `query`), queries Pinecone with optional `$eq` metadata filter on
+  `recommendation`. Returns ranked dicts with similarity_score, excerpt, health_score,
+  report_date. `index_stats()` returns namespace vector count for the UI health check.
+  Guards against missing index gracefully.
+- `scripts/run_indexer.py` — CLI: `--all` indexes every report, default indexes
+  latest only, `--dry-run` parses without touching Pinecone, `--debug` sets
+  logging to DEBUG to inspect parsed record content.
+- `frontend/pages/05_search.py` — Search bar + recommendation filter (All /
+  REPLACE / UPGRADE / MONITOR) + top-k slider. Index vector count shown in sidebar.
+  "Run agent first" message when index is empty. Results show similarity score,
+  health score badge, action badge with color, and excerpt with colored left-border.
+  Example query buttons on landing state.
+- `scripts/daily_run.ps1` — One-command daily pipeline: ingestion → silver →
+  dbt run+test → agent (limit 10) → indexer.
+- `scripts/run_agent.py` (updated) — Auto-calls `index_latest_report()` after
+  every non-dry-run when `PINECONE_API_KEY` is set. Failure is non-fatal (warning).
+
+**Key decisions:**
+- Index auto-creation uses dim=1024 to match `llama-text-embed-v2` default output.
+  Metric is cosine (standard for semantic similarity on normalised embeddings).
+- Markdown parser switched from regex substitution to line-by-line filtering to
+  avoid Windows CRLF edge case: `^---$` regex doesn't match `---\r`, but
+  `stripped == "---"` does.
+- Empty assessment text uses a metadata fallback sentence rather than skipping —
+  keeps every assessed project searchable by name and recommendation even when
+  Claude's response was not captured in the report.
+- Vector IDs are deterministic hashes so re-indexing the same report is a
+  no-op upsert, not a duplicate insert.
+
+**Bugs fixed:**
+- Pinecone index not found (404) on first run — fixed by `_get_or_create_index()`.
+- Empty string embed rejected (400) — fixed by fallback text + line-by-line parser.
+
+**Index status:** `oss-health` index, namespace `oss-deps`, 2+ vectors from
+`risk_report_2026-04-12T19-36-29.md`.
+
+---
+
+
+
+---
+
 ## Non-Obvious Gotchas
 
 These caused real bugs and will again if forgotten:
@@ -57,6 +112,7 @@ These caused real bugs and will again if forgotten:
 | 4 | LangGraph agent — 5-node workflow | ✅ Complete |
 | 5 | Streamlit UI | ✅ Complete |
 | 6 | Polish, README, architecture diagram | ✅ Complete |
+| 7 | Pinecone RAG layer + daily pipeline | ✅ Complete |
 
 ## Phase 7 — Pinecone RAG Layer
 
@@ -104,3 +160,78 @@ project assessments using natural language.
 - [ ] Search page returns relevant results for natural language queries
 - [ ] Filtering by recommendation type works correctly
 - [ ] Results show similarity score and excerpt
+
+---
+
+## Phase 8 — Dependency Discovery
+
+**Goal:** Allow any company to onboard their actual dependency stack
+by parsing standard package manifest files and automatically resolving
+dependencies to GitHub repositories for monitoring.
+
+**How It Works:**
+1. User provides one or more manifest files (requirements.txt, 
+   package.json, etc.)
+2. Parser extracts package names and versions
+3. Resolver calls GitHub Search API to find the canonical org/repo
+4. Resolved projects are added to project_list.py monitoring list
+5. Next pipeline run automatically includes new projects
+
+**Files to Build:**
+
+| File | Purpose |
+|---|---|
+| `ingestion/discovery/manifest_parser.py` | Parses requirements.txt, package.json, go.mod, pom.xml, Cargo.toml |
+| `ingestion/discovery/github_resolver.py` | Resolves package names to GitHub org/repo via GitHub Search API |
+| `ingestion/discovery/project_registry.py` | Manages adding/removing projects from monitoring list |
+| `scripts/discover_dependencies.py` | CLI entry point |
+
+**CLI Usage:**
+```
+# Onboard a Python project
+python scripts\discover_dependencies.py --manifest requirements.txt
+
+# Onboard a Node project  
+python scripts\discover_dependencies.py --manifest package.json
+
+# Onboard multiple manifests
+python scripts\discover_dependencies.py --manifest requirements.txt --manifest package.json
+
+# Preview without adding to monitoring list
+python scripts\discover_dependencies.py --manifest requirements.txt --dry-run
+
+# Show current monitoring list
+python scripts\discover_dependencies.py --list
+```
+
+**Output Example:**
+```
+Parsed 45 dependencies from requirements.txt
+Resolved 38/45 to GitHub repositories
+Added 12 new projects to monitoring list (26 already monitored)
+Failed to resolve 7 packages (logged to docs/unresolved.txt)
+
+New projects added:
+  + pydantic/pydantic        (python/validation)
+  + tiangolo/fastapi         (python/framework) 
+  + celery/celery            (python/task-queue)
+  ...
+```
+
+**Key Requirements:**
+- GitHub Search API for resolution (GITHUB_TOKEN already in .env)
+- Cache resolved packages to avoid repeat API calls
+- Dry run flag shows what would be added without modifying project_list.py
+- Handle packages with no GitHub repo gracefully (log to unresolved.txt)
+- Preserve existing project_list.py structure and categories
+- Add discovered projects under a "discovered" category
+- Deduplication — never add a project already being monitored
+
+**Acceptance Criteria:**
+- [ ] `discover_dependencies.py --manifest requirements.txt --dry-run` works
+- [ ] At least 80% of packages in a standard requirements.txt resolve correctly
+- [ ] project_list.py updated correctly after non-dry-run
+- [ ] Duplicates handled gracefully
+- [ ] Unresolved packages logged to docs/unresolved.txt
+
+---
