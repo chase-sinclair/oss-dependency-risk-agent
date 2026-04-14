@@ -1,5 +1,5 @@
 """
-Reusable Plotly bar chart component for health score visualisation.
+Reusable Plotly chart components for health score visualisation.
 """
 
 from typing import Optional
@@ -11,10 +11,10 @@ import streamlit as st
 
 def _score_color(score: float) -> str:
     if score >= 7.0:
-        return "#2ecc71"   # green
+        return "#27ae60"   # green
     if score >= 5.0:
-        return "#f39c12"   # yellow/amber
-    return "#e74c3c"       # red
+        return "#e67e22"   # amber
+    return "#c0392b"       # red
 
 
 def render_health_bar_chart(
@@ -43,7 +43,7 @@ def render_health_bar_chart(
     plot_df = plot_df.sort_values(score_col, ascending=True)
 
     colors = [_score_color(v) for v in plot_df[score_col]]
-    chart_height = height or max(300, len(plot_df) * 40)
+    chart_height = height or max(300, len(plot_df) * 32)
 
     fig = go.Figure(
         go.Bar(
@@ -57,22 +57,22 @@ def render_health_bar_chart(
         )
     )
     fig.update_layout(
-        title=title,
-        xaxis=dict(range=[0, 10.5], title="Health Score (0-10)"),
+        title=dict(text=title, font=dict(size=14)),
+        xaxis=dict(range=[0, 11], title="Health Score (0–10)"),
         yaxis=dict(title=""),
         height=chart_height,
-        margin=dict(l=20, r=60, t=50, b=20),
+        margin=dict(l=20, r=80, t=50, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.2)")
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)")
 
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_trend_chart(
     df: pd.DataFrame,
-    month_col: str = "event_month",
+    month_col: str = "last_event_date",
     score_col: str = "health_score",
     repo_col: str = "repo_full_name",
     title: str = "Health Score Over Time",
@@ -106,22 +106,24 @@ def render_trend_chart(
                 y=subset[score_col],
                 mode="lines+markers",
                 name=repo,
+                line=dict(width=2),
+                marker=dict(size=8),
             )
         )
 
-    fig.add_hline(y=7.0, line_dash="dot", line_color="#2ecc71", annotation_text="Healthy (7.0)")
-    fig.add_hline(y=5.0, line_dash="dot", line_color="#f39c12", annotation_text="Warning (5.0)")
+    fig.add_hline(y=7.0, line_dash="dot", line_color="#27ae60", annotation_text="Healthy (7.0)")
+    fig.add_hline(y=5.0, line_dash="dot", line_color="#e67e22", annotation_text="Warning (5.0)")
 
     fig.update_layout(
-        title=title,
-        xaxis_title="Month",
-        yaxis=dict(range=[0, 10], title="Health Score"),
+        title=dict(text=title, font=dict(size=14)),
+        xaxis_title="Period",
+        yaxis=dict(range=[0, 10.5], title="Health Score"),
         height=350,
         margin=dict(l=20, r=20, t=50, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.2)")
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.2)")
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)")
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)")
 
     st.plotly_chart(fig, use_container_width=True)

@@ -31,7 +31,9 @@ SELECT
     contributor_score,
     bus_factor_score,
     health_trend,
-    event_month
+    data_days_available,
+    first_event_date,
+    last_event_date
 FROM {catalog}.{schema}.gold_health_scores
 WHERE
     health_score IS NOT NULL

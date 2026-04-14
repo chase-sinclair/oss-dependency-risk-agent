@@ -3,26 +3,32 @@ version: 2
 models:
   - name: gold_project_health
     description: >
-      Wide monthly health metrics per project, joining commit activity,
-      issue health, PR health, and contributor diversity.
-      One row per (repo_full_name, event_month).
+      Wide health metrics per project, aggregated across ALL available event data.
+      One row per repo_full_name. Includes date-span metadata (first/last event,
+      data_days_available) so downstream consumers know how much history backs
+      each metric.
     columns:
       - name: repo_full_name
         description: "org/repo slug"
         data_tests:
           - not_null
-      - name: event_month
-        description: "First day of the calendar month (UTC)"
+          - unique
+      - name: data_days_available
+        description: "Number of distinct event_date values in the source data for this repo"
         data_tests:
           - not_null
+      - name: first_event_date
+        description: "Earliest event_date for this repo in the current dataset"
+      - name: last_event_date
+        description: "Most recent event_date for this repo in the current dataset"
       - name: commits_per_week
-        description: "Estimated weekly commit cadence (total_commits / 30 * 7)"
+        description: "Weekly commit cadence: total_commits / active_days * 7"
       - name: issue_resolution_rate
-        description: "issues_closed / issues_opened. Null if no issue events in month."
+        description: "issues_closed / issues_opened across all data. Null if no issue events."
       - name: pr_merge_rate
-        description: "prs_closed / prs_opened. Null if no PR events in month."
+        description: "prs_closed / prs_opened across all data. Null if no PR events."
       - name: contributor_count
-        description: "Distinct committers in the month"
+        description: "Distinct committers across all data"
       - name: bus_factor_risk
         description: "Fraction of commits from top-3 contributors (0-1). Higher = more concentrated."
       - name: computed_at
@@ -30,18 +36,16 @@ models:
 
   - name: gold_health_scores
     description: >
-      Composite health score (0-10) per project per month, derived from
-      weighted normalisation of the five core health signals.
-      Includes month-over-month health_trend.
+      Composite health score (0-10) per project, derived from weighted
+      normalisation of five core health signals aggregated across all available data.
+      One row per repo_full_name. health_trend is reserved as NULL until
+      historical score snapshots are available across multiple runs.
     columns:
       - name: repo_full_name
         description: "org/repo slug"
         data_tests:
           - not_null
-      - name: event_month
-        description: "First day of the calendar month (UTC)"
-        data_tests:
-          - not_null
+          - unique
       - name: health_score
         description: "Weighted composite score, 0-10"
         data_tests:
@@ -51,7 +55,17 @@ models:
                 min_value: 0
                 max_value: 10
       - name: health_trend
-        description: "Month-over-month change in health_score. Null for first observed month."
+        description: "Reserved for future use: change in health_score vs. prior snapshot. Currently NULL."
+      - name: prev_health_score
+        description: "Reserved for future use: prior snapshot health_score. Currently NULL."
+      - name: data_days_available
+        description: "Number of distinct event days used to compute this score"
+        data_tests:
+          - not_null
+      - name: first_event_date
+        description: "Earliest event_date included in the score calculation"
+      - name: last_event_date
+        description: "Most recent event_date included in the score calculation"
       - name: commit_score
         description: "Normalised commit frequency component, 0-10"
         data_tests:

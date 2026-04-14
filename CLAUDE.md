@@ -164,125 +164,61 @@ These caused real bugs and will again if forgotten:
 | 6 | Polish, README, architecture diagram | ✅ Complete |
 | 7 | Pinecone RAG layer + daily pipeline | ✅ Complete |
 | 8 | Dependency discovery from manifests | ✅ Complete |
+| 9 | UI/UX overhaul + feature additions  | ✅ Complete |
 
-## Phase 7 — Pinecone RAG Layer
-
-**Goal:** Embed generated risk assessment reports into Pinecone and add
-semantic search to the Streamlit UI so users can query across all
-project assessments using natural language.
-
-**How It Works:**
-1. After agent generates a report, indexer embeds each project's
-   risk assessment text using Pinecone's hosted llama-text-embed-v2
-2. Each vector stored with metadata: repo_full_name, health_score,
-   recommendation, report_timestamp
-3. Streamlit search page accepts natural language queries, embeds
-   them, and returns top 5 semantically similar projects
-
-**Files to Build:**
-
-| File | Purpose |
-|---|---|
-| `embeddings/indexer.py` | Parse report markdown, embed per-project sections, upsert to Pinecone |
-| `embeddings/searcher.py` | Query Pinecone, return ranked results with excerpts |
-| `scripts/run_indexer.py` | CLI entry point: indexes latest or all reports |
-| `frontend/pages/05_search.py` | Streamlit semantic search page |
-
-**Pinecone Configuration:**
-- Index: `oss-health`
-- Namespace: `oss-deps`
-- Embedding model: `llama-text-embed-v2` (hosted, no separate API needed)
-- Metadata fields: repo_full_name, health_score, recommendation,
-  report_date, report_file
-
-**Key Requirements:**
-- Parse docs/reports/*.md to extract per-project sections
-- Each project's full assessment text becomes one Pinecone vector
-- Metadata enables filtered search (e.g. only REPLACE recommendations)
-- Searcher returns: project name, health score, recommendation,
-  relevant excerpt, similarity score
-- Search page has optional filter: All / REPLACE / UPGRADE / MONITOR
-- Index on every agent run automatically
-- Handle empty index gracefully (show "Run agent first" message)
-
-**Acceptance Criteria:**
-- [ ] `python scripts\run_indexer.py` indexes all existing reports
-- [ ] Pinecone console shows vectors in oss-health index
-- [ ] Search page returns relevant results for natural language queries
-- [ ] Filtering by recommendation type works correctly
-- [ ] Results show similarity score and excerpt
 
 ---
 
-## Phase 8 — Dependency Discovery
+## Phase 9 — UI/UX Overhaul (Complete)
 
-**Goal:** Allow any company to onboard their actual dependency stack
-by parsing standard package manifest files and automatically resolving
-dependencies to GitHub repositories for monitoring.
+**Files updated:** `frontend/app.py`, `frontend/pages/01_health_dashboard.py`,
+`frontend/pages/02_project_detail.py`, `frontend/pages/03_run_agent.py`,
+`frontend/pages/04_reports.py`, `frontend/pages/05_search.py`,
+`frontend/components/health_chart.py`, `frontend/components/metrics_card.py`
 
-**How It Works:**
-1. User provides one or more manifest files (requirements.txt, 
-   package.json, etc.)
-2. Parser extracts package names and versions
-3. Resolver calls GitHub Search API to find the canonical org/repo
-4. Resolved projects are added to project_list.py monitoring list
-5. Next pipeline run automatically includes new projects
+**Key changes per page:**
 
-**Files to Build:**
+- **Home** — Two-column top-5 layout (at-risk left, healthiest right); 6 summary
+  cards including AI Assessed count; pipeline + agent run timestamps from real
+  sources (`computed_at` column + report filename); "View →" buttons navigate to
+  Project Detail via `st.session_state["nav_repo"]` + `st.switch_page`.
 
-| File | Purpose |
-|---|---|
-| `ingestion/discovery/manifest_parser.py` | Parses requirements.txt, package.json, go.mod, pom.xml, Cargo.toml |
-| `ingestion/discovery/github_resolver.py` | Resolves package names to GitHub org/repo via GitHub Search API |
-| `ingestion/discovery/project_registry.py` | Manages adding/removing projects from monitoring list |
-| `scripts/discover_dependencies.py` | CLI entry point |
+- **Health Dashboard** — Top-of-page project search box; Status (🔴/🟡/🟢) dot
+  column; AI Assessed (✓) column built by scanning all report files; paginated
+  25 rows/page with page number input; org/category + status + min-score sidebar
+  filters; Export CSV; row selection via `st.dataframe(on_select="rerun")` with
+  "View Project →" button; full distribution bar chart collapsed in expander.
 
-**CLI Usage:**
-```
-# Onboard a Python project
-python scripts\discover_dependencies.py --manifest requirements.txt
+- **Project Detail** — Reads `nav_repo` from session state for cross-page
+  navigation; health badge + GitHub link button in header; 2×3 metric grid using
+  new `render_score_card`; terminal-style AI assessment box (dark `#0d1117` bg,
+  mac window chrome, `Courier New` monospace, `html.escape` safe); last-assessed
+  timestamp from report filename; "Open Agent Control Room" button when no
+  assessment found.
 
-# Onboard a Node project  
-python scripts\discover_dependencies.py --manifest package.json
+- **Agent Control Room** — Renamed from "Run Agent"; `--min-score` / `--max-score`
+  sliders in sidebar, passed to `scripts/run_agent.py`; pipeline steps fixed to
+  Monitor → Investigate → Synthesize → Recommend → Deliver (5 distinct, no
+  duplicate); last-run summary parsed from most recent report (counts REPLACE /
+  UPGRADE / MONITOR); post-run "View Report →" link.
 
-# Onboard multiple manifests
-python scripts\discover_dependencies.py --manifest requirements.txt --manifest package.json
+- **Reports** — Sidebar labels formatted `YYYY-MM-DD HH:MM (N projects)` by
+  counting `### ` headers; Print button via `streamlit.components.v1.html` +
+  `window.parent.print()`; Export HTML button; recommendation-type jump filter
+  (REPLACE / UPGRADE / MONITOR) that extracts matching sections; report comparison
+  — select two reports, parse recommendations per project, show diff table with
+  ⚠ changed marker; `compare_idx` defaulted to `None` to avoid scoping bugs.
 
-# Preview without adding to monitoring list
-python scripts\discover_dependencies.py --manifest requirements.txt --dry-run
+- **Semantic Search** — Centered search bar in a 1:6:1 column layout; 5 example
+  prompt pills auto-submit via `st.session_state["_auto_search"] = True` + rerun;
+  "View Detail →" per result navigates to Project Detail; "Projects indexed: N"
+  label; dead pill_html string removed.
 
-# Show current monitoring list
-python scripts\discover_dependencies.py --list
-```
+- **Components** — Added `status_dot()` to `metrics_card.py` and `render_score_card()`
+  for grid layout on Project Detail; consistent colour palette
+  (`#27ae60` / `#e67e22` / `#c0392b`) across all components; `health_chart.py`
+  updated colour palette and default `month_col`.
 
-**Output Example:**
-```
-Parsed 45 dependencies from requirements.txt
-Resolved 38/45 to GitHub repositories
-Added 12 new projects to monitoring list (26 already monitored)
-Failed to resolve 7 packages (logged to docs/unresolved.txt)
-
-New projects added:
-  + pydantic/pydantic        (python/validation)
-  + tiangolo/fastapi         (python/framework) 
-  + celery/celery            (python/task-queue)
-  ...
-```
-
-**Key Requirements:**
-- GitHub Search API for resolution (GITHUB_TOKEN already in .env)
-- Cache resolved packages to avoid repeat API calls
-- Dry run flag shows what would be added without modifying project_list.py
-- Handle packages with no GitHub repo gracefully (log to unresolved.txt)
-- Preserve existing project_list.py structure and categories
-- Add discovered projects under a "discovered" category
-- Deduplication — never add a project already being monitored
-
-**Acceptance Criteria:**
-- [ ] `discover_dependencies.py --manifest requirements.txt --dry-run` works
-- [ ] At least 80% of packages in a standard requirements.txt resolve correctly
-- [ ] project_list.py updated correctly after non-dry-run
-- [ ] Duplicates handled gracefully
-- [ ] Unresolved packages logged to docs/unresolved.txt
-
----
+**Navigation pattern:** Pages set `st.session_state["nav_repo"] = repo` then call
+`st.switch_page("pages/02_project_detail.py")`. Project Detail reads and pops
+`nav_repo` before rendering the selectbox to pre-select the right project.
