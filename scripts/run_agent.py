@@ -100,6 +100,16 @@ def main() -> int:
     else:
         logger.warning("Agent produced no report output.")
 
+    # Auto-index into Pinecone after a successful non-dry-run
+    if not args.dry_run and report and os.environ.get("PINECONE_API_KEY"):
+        logger.info("Auto-indexing latest report into Pinecone...")
+        try:
+            from embeddings.indexer import index_latest_report
+            count = index_latest_report()
+            logger.info("Pinecone: indexed %d vectors.", count)
+        except Exception as exc:
+            logger.warning("Pinecone indexing failed (non-fatal): %s", exc)
+
     return 0
 
 
