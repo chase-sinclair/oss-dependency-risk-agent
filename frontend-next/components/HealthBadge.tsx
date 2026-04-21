@@ -3,10 +3,25 @@ interface Props {
   size?: "sm" | "md" | "lg";
 }
 
-function colorClass(score: number): string {
-  if (score >= 7.0) return "bg-green-100 text-green-800";
-  if (score >= 5.0) return "bg-yellow-100 text-yellow-800";
-  return "bg-red-100 text-red-800";
+function glowStyle(score: number): React.CSSProperties {
+  if (score >= 7.0) return {
+    background: "rgba(0,230,118,0.1)",
+    color: "#00E676",
+    boxShadow: "0 0 8px rgba(0,230,118,0.2)",
+    border: "1px solid rgba(0,230,118,0.25)",
+  };
+  if (score >= 5.0) return {
+    background: "rgba(251,191,36,0.1)",
+    color: "#FBBF24",
+    boxShadow: "0 0 8px rgba(251,191,36,0.15)",
+    border: "1px solid rgba(251,191,36,0.25)",
+  };
+  return {
+    background: "rgba(255,76,76,0.1)",
+    color: "#FF4C4C",
+    boxShadow: "0 0 8px rgba(255,76,76,0.25)",
+    border: "1px solid rgba(255,76,76,0.3)",
+  };
 }
 
 function sizeClass(size: "sm" | "md" | "lg"): string {
@@ -18,7 +33,8 @@ function sizeClass(size: "sm" | "md" | "lg"): string {
 export default function HealthBadge({ score, size = "md" }: Props) {
   return (
     <span
-      className={`inline-block rounded font-mono ${colorClass(score)} ${sizeClass(size)}`}
+      className={`inline-block rounded font-mono ${sizeClass(size)}`}
+      style={glowStyle(score)}
     >
       {score.toFixed(1)}
     </span>

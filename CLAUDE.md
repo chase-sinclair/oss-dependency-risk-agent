@@ -165,6 +165,7 @@ These caused real bugs and will again if forgotten:
 | 7 | Pinecone RAG layer + daily pipeline | ✅ Complete |
 | 8 | Dependency discovery from manifests | ✅ Complete |
 | 9 | UI/UX overhaul + feature additions  | ✅ Complete |
+| 10 | Next.js + FastAPI frontend | ✅ Complete |
 
 
 ---
@@ -222,3 +223,59 @@ These caused real bugs and will again if forgotten:
 **Navigation pattern:** Pages set `st.session_state["nav_repo"] = repo` then call
 `st.switch_page("pages/02_project_detail.py")`. Project Detail reads and pops
 `nav_repo` before rendering the selectbox to pre-select the right project.
+
+---
+
+## Phase 10 — Next.js + FastAPI Frontend (Complete)
+
+Streamlit replaced with a FastAPI REST API (`api/`) + Next.js 14 App Router frontend
+(`frontend-next/`). Streamlit files kept but deprecated.
+
+**Files built:**
+- `api/__init__.py`, `api/main.py` — FastAPI app with CORS for `localhost:3000`;
+  fires a `SELECT 1` warmup query in a background thread on startup to pre-warm
+  the Databricks warehouse before the first user request.
+- `api/models.py` — Pydantic models for all request/response shapes.
+- `api/routers/health.py` — `GET /api/health-scores`, `GET /api/health-scores/{org}/{repo}`,
+  `GET /api/summary`. Summary reads report files for `last_agent_run` and
+  `assessed_repos`; all Databricks values cast from strings at the API layer.
+- `api/routers/reports.py` — `GET /api/reports`, `GET /api/reports/{filename}`.
+  Filename validated against `^risk_report_[\w\-:.]+\.md$`; path traversal
+  blocked by resolving and comparing to reports dir.
+- `api/routers/search.py` — `POST /api/search` proxies to `embeddings/searcher.py`.
+- `api/routers/agent.py` — `POST /api/agent/run` launches `scripts/run_agent.py`
+  as a subprocess; `GET /api/agent/status/{run_id}` polls `process.poll()` and
+  diffs report file lists to find the new report on completion.
+- `scripts/run_api.py` — entry point; uses `--reload-dir api` to scope watchfiles
+  to `api/` only (watching `.venv` blocks the event loop on Windows).
+- `scripts/run_dev.ps1` — starts both servers in separate PowerShell windows.
+- `frontend-next/` — Next.js 14 App Router, TypeScript, Tailwind only (no UI libs).
+  Pages: `/` (home), `/dashboard`, `/projects/[org]/[repo]`, `/search`,
+  `/reports`, `/agent`. Shared: `Sidebar`, `HealthBadge`, `LoadingSpinner`.
+  All API calls in `lib/api.ts` with 120s timeout and human-readable error messages.
+
+**Run both servers:**
+```powershell
+# Backend (from project root, venv active)
+python scripts/run_api.py
+
+# Frontend (in a second terminal)
+cd frontend-next
+npm run dev
+```
+
+Or together: `.\scripts\run_dev.ps1`
+
+**Non-obvious gotchas fixed during build:**
+- `next.config.ts` / `tailwind.config.ts` are not supported in Next.js 14 — must
+  use `.js` with `module.exports`.
+- `uvicorn --reload` without `--reload-dir` watches the entire project root
+  including `.venv`. On Windows this blocks the event loop entirely: the server
+  accepts TCP connections but never sends HTTP responses. Fix: `--reload-dir api`.
+- `frontend-next/node_modules` must be in `.gitignore`. If accidentally committed,
+  rewrite history with `git reset --soft <last-clean-commit>` + force push — a
+  `git rm --cached` commit alone still leaves the blob in history and GitHub rejects
+  the push.
+- Databricks cold-start: the warehouse shows "Running" in the console but the first
+  query still takes 60–90 s. The startup warmup thread handles this. Frontend
+  timeout is 120 s; spinner shows a hint after 6 s.

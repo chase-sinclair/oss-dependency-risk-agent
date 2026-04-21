@@ -1,3 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --midnight-carbon: #0B0E14;
+  --surface-carbon:  #161B22;
+  --neon-crimson:    #FF4C4C;
+  --emerald-pulse:   #00E676;
+  --electric-violet: #8B5CF6;
+  --text-primary:    #F0F6FC;
+  --text-muted:      #8B9BB4;
+  --border-subtle:   rgba(255, 255, 255, 0.08);
+}
+
+@layer base {
+  body {
+    background-color: var(--midnight-carbon);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+
+@keyframes agent-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(139, 92, 246, 0.5); }
+  50%       { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0);   }
+}
+
+@keyframes spin-ring {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes energy-flow {
+  0%   { left: -60%; }
+  100% { left: 160%; }
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utility classes ────────────────────────────────────────────────────────── */
+
+.animate-agent-pulse { animation: agent-pulse   2.5s ease-in-out infinite; }
+.animate-spin-ring   { animation: spin-ring      1s   linear      infinite; }
+.animate-slide-right { animation: slide-in-right 0.22s ease-out   both;    }
+.animate-fade-up     { animation: fade-up        0.3s  ease-out   both;    }
+
+/* ── Terminal cursor ────────────────────────────────────────────────────────── */
+
+.terminal-cursor::after {
+  content: '▊';
+  animation: blink-cursor 1s step-end infinite;
+  color: var(--emerald-pulse);
+  margin-left: 2px;
+}
+
+/* ── Custom dark scrollbar ──────────────────────────────────────────────────── */
+
+.scrollbar-dark::-webkit-scrollbar       { width: 4px; height: 4px; }
+.scrollbar-dark::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 2px;
+}
+
+/* ── Focus ring ─────────────────────────────────────────────────────────────── */
+
+* { outline: none; }
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.6) !important;
+}
+
+/* ── Energy bar (animated pipeline connector) ───────────────────────────────── */
+
+.energy-bar {
+  position: relative;
+  overflow: hidden;
+}
+.energy-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 60%;
+  background: linear-gradient(90deg, transparent, rgba(139,92,246,0.7), transparent);
+  animation: energy-flow 1.4s linear infinite;
+}

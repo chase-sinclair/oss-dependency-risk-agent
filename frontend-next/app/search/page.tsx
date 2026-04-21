@@ -1,51 +1,103 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { searchProjects } from "@/lib/api";
 import type { SearchResult } from "@/types/api";
 import HealthBadge from "@/components/HealthBadge";
-import LoadingSpinner from "@/components/LoadingSpinner";
+
+const BORDER  = "rgba(255,255,255,0.08)";
+const SURFACE = "rgba(22,27,34,0.7)";
+
+const PLACEHOLDERS = [
+  "Which projects have high bus-factor risk?",
+  "Find ML frameworks with declining maintenance...",
+  "Projects at risk of abandonment?",
+  "Which dependencies should be replaced urgently?",
+  "Safe frameworks to build on long term?",
+];
 
 const EXAMPLES = [
-  "safe frameworks to build on long term",
-  "projects with high bus factor risk",
-  "which ML frameworks are well maintained",
-  "projects with stalled PR pipelines",
+  { label: "Bus factor risk",       query: "projects with high bus factor risk" },
+  { label: "ML maintenance",        query: "which ML frameworks are well maintained" },
+  { label: "Stalled PRs",           query: "projects with stalled PR pipelines" },
+  { label: "Safe long-term builds", query: "safe frameworks to build on long term" },
+  { label: "Abandonment signals",   query: "projects showing signs of abandonment" },
 ];
 
 type Filter = "All" | "REPLACE" | "UPGRADE" | "MONITOR";
 
+const THOUGHT_STEPS = [
+  "> Initializing vector search engine...",
+  "> Embedding query with llama-text-embed-v2...",
+  "> Querying Pinecone oss-health index...",
+  "> Filtering by health thresholds...",
+  "> Synthesizing results via Claude Sonnet...",
+  "> Ranking by semantic relevance...",
+];
+
 function RecBadge({ rec }: { rec: string | null }) {
   if (!rec) return null;
-  const colors: Record<string, string> = {
-    REPLACE: "bg-red-100 text-red-700",
-    UPGRADE: "bg-yellow-100 text-yellow-700",
-    MONITOR: "bg-green-100 text-green-700",
-  };
+  const style: React.CSSProperties =
+    rec === "REPLACE" ? { color: "#FF4C4C", background: "rgba(255,76,76,0.1)",  border: "1px solid rgba(255,76,76,0.25)"  } :
+    rec === "UPGRADE" ? { color: "#FBBF24", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)" } :
+                        { color: "#00E676", background: "rgba(0,230,118,0.1)",  border: "1px solid rgba(0,230,118,0.25)"  };
   return (
-    <span
-      className={`text-xs font-semibold px-2 py-0.5 rounded ${colors[rec] ?? "bg-gray-100 text-gray-600"}`}
-    >
+    <span className="text-xs font-semibold px-2 py-0.5 rounded font-mono" style={style}>
       {rec}
     </span>
   );
 }
 
 export default function SearchPage() {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("All");
-  const [topK, setTopK] = useState(5);
+  const [query, setQuery]     = useState("");
+  const [filter, setFilter]   = useState<Filter>("All");
+  const [topK, setTopK]       = useState(5);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [placeholder, setPlaceholder] = useState(PLACEHOLDERS[0]);
+  const [thoughtStep, setThoughtStep] = useState(0);
+  const [thoughtLines, setThoughtLines] = useState<string[]>([]);
+  const thoughtTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Rotate placeholder text
+  useEffect(() => {
+    let i = 0;
+    const t = setInterval(() => {
+      i = (i + 1) % PLACEHOLDERS.length;
+      setPlaceholder(PLACEHOLDERS[i]);
+    }, 3500);
+    return () => clearInterval(t);
+  }, []);
+
+  function stopThought() {
+    if (thoughtTimer.current) { clearInterval(thoughtTimer.current); thoughtTimer.current = null; }
+  }
 
   async function doSearch(q: string) {
     if (!q.trim()) return;
     setLoading(true);
     setError(null);
     setSearched(true);
+    setThoughtStep(0);
+    setThoughtLines([]);
+
+    // Stream thought process log lines
+    let step = 0;
+    thoughtTimer.current = setInterval(() => {
+      if (step < THOUGHT_STEPS.length) {
+        setThoughtLines(prev => [...prev, THOUGHT_STEPS[step]]);
+        setThoughtStep(step);
+        step++;
+      } else {
+        stopThought();
+      }
+    }, 280);
+
     try {
       const hits = await searchProjects({
         query: q,
@@ -56,133 +108,247 @@ export default function SearchPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
+      stopThought();
       setLoading(false);
     }
   }
 
   return (
-    <div className="p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold mb-2">Semantic Search</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Ask natural-language questions about dependency health.
+    <div className="p-8 max-w-3xl" style={{ color: "#F0F6FC" }}>
+      {/* Page header */}
+      <h1 className="text-2xl font-bold mb-1">AI Investigator</h1>
+      <p className="text-sm mb-8" style={{ color: "#8B9BB4" }}>
+        Natural-language queries powered by vector search + Claude Sonnet.
       </p>
 
-      {/* Search bar */}
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && doSearch(query)}
-            placeholder="e.g. which projects are showing declining maintenance?"
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-          />
-        </div>
+      {/* Omni-bar */}
+      <div
+        className="flex gap-0 mb-6 rounded-xl overflow-hidden transition-all"
+        style={{
+          border: focused
+            ? "1px solid rgba(139,92,246,0.6)"
+            : "1px solid rgba(139,92,246,0.2)",
+          boxShadow: focused ? "0 0 24px rgba(139,92,246,0.2)" : "none",
+          background: SURFACE,
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && doSearch(query)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent px-5 py-3.5 text-sm"
+          style={{ color: "#F0F6FC" }}
+        />
         <button
           onClick={() => doSearch(query)}
           disabled={loading}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-blue-700"
+          className="px-6 py-3.5 text-sm font-semibold transition-colors disabled:opacity-50"
+          style={{
+            background: "rgba(139,92,246,0.2)",
+            color: "#8B5CF6",
+            borderLeft: "1px solid rgba(139,92,246,0.2)",
+          }}
         >
-          Search
+          {loading ? "..." : "Investigate"}
         </button>
       </div>
 
-      {/* Example pills */}
+      {/* Filters row */}
+      <div className="flex items-center gap-4 mb-6 flex-wrap">
+        {/* Constraint pills */}
+        <div className="flex items-center gap-1">
+          {(["All", "REPLACE", "UPGRADE", "MONITOR"] as Filter[]).map((f) => {
+            const active = filter === f;
+            const color =
+              f === "REPLACE" ? "#FF4C4C" :
+              f === "UPGRADE" ? "#FBBF24" :
+              f === "MONITOR" ? "#00E676" :
+              "#8B9BB4";
+            return (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                style={{
+                  background: active ? `${color}18` : "transparent",
+                  color: active ? color : "#8B9BB4",
+                  border: `1px solid ${active ? color + "40" : BORDER}`,
+                }}
+              >
+                {f}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 text-xs ml-auto" style={{ color: "#8B9BB4" }}>
+          <span>Top</span>
+          <input
+            type="range" min={1} max={20} value={topK}
+            onChange={(e) => setTopK(Number(e.target.value))}
+            className="w-20 accent-violet-500"
+          />
+          <span className="font-mono w-4" style={{ color: "#8B5CF6" }}>{topK}</span>
+        </div>
+      </div>
+
+      {/* Example investigation briefs */}
       {!searched && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          {EXAMPLES.map((ex) => (
+        <div className="flex flex-wrap gap-2 mb-8">
+          {EXAMPLES.map(({ label, query: q }) => (
             <button
-              key={ex}
-              onClick={() => {
-                setQuery(ex);
-                doSearch(ex);
+              key={label}
+              onClick={() => { setQuery(q); doSearch(q); }}
+              className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+              style={{
+                background: "rgba(139,92,246,0.07)",
+                color: "#8B9BB4",
+                border: "1px solid rgba(139,92,246,0.2)",
               }}
-              className="text-xs border border-gray-300 rounded-full px-3 py-1.5 text-gray-600 hover:bg-gray-50"
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.color = "#8B5CF6";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(139,92,246,0.4)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.color = "#8B9BB4";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(139,92,246,0.2)";
+              }}
             >
-              {ex}
+              {label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Sidebar filters in-line */}
-      <div className="flex items-center gap-4 mb-6 text-sm text-gray-600">
-        <div className="flex items-center gap-2">
-          <label>Recommendation:</label>
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as Filter)}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
+      {/* Thought process terminal */}
+      {loading && thoughtLines.length > 0 && (
+        <div
+          className="rounded-xl mb-6 overflow-hidden"
+          style={{ background: "#060A0F", border: "1px solid rgba(139,92,246,0.2)" }}
+        >
+          <div
+            className="flex items-center gap-1.5 px-4 py-2"
+            style={{ borderBottom: "1px solid rgba(139,92,246,0.1)", background: "#0B0E14" }}
           >
-            {(["All", "REPLACE", "UPGRADE", "MONITOR"] as Filter[]).map((f) => (
-              <option key={f}>{f}</option>
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#FF4C4C" }} />
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#FBBF24" }} />
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#00E676" }} />
+            <span className="ml-3 text-xs font-mono" style={{ color: "#4B5563" }}>
+              agent.reasoning
+            </span>
+          </div>
+          <div className="px-4 py-3 space-y-1">
+            {thoughtLines.map((line, i) => (
+              <p
+                key={i}
+                className="text-xs font-mono animate-fade-up"
+                style={{ color: i === thoughtLines.length - 1 ? "#8B5CF6" : "#4B5563" }}
+              >
+                {line}
+              </p>
             ))}
-          </select>
+            <p className="text-xs font-mono terminal-cursor" style={{ color: "#8B5CF6" }} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <label>Max results:</label>
-          <input
-            type="range"
-            min={1}
-            max={20}
-            value={topK}
-            onChange={(e) => setTopK(Number(e.target.value))}
-            className="w-24"
-          />
-          <span className="font-mono w-4">{topK}</span>
-        </div>
-      </div>
-
-      {/* Results */}
-      {loading && <LoadingSpinner message="Searching..." />}
-      {error && <p className="text-red-600 text-sm">{error}</p>}
-
-      {!loading && searched && results.length === 0 && !error && (
-        <p className="text-gray-400 text-sm">No results found. Try a different query.</p>
       )}
 
+      {error && <p className="text-sm mb-4" style={{ color: "#FF4C4C" }}>{error}</p>}
+
+      {!loading && searched && results.length === 0 && !error && (
+        <p className="text-sm" style={{ color: "#4B5563" }}>
+          No results found. Try a different query or check that the agent has been run.
+        </p>
+      )}
+
+      {/* Insight cards */}
       <div className="space-y-4">
-        {results.map((r, i) => (
-          <div
-            key={`${r.repo_full_name}-${i}`}
-            className="border border-gray-200 rounded-lg p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
+        {results.map((r, i) => {
+          const confidence = (r.similarity_score * 100).toFixed(1);
+          const isHighMatch = r.similarity_score > 0.8;
+          return (
+            <div
+              key={`${r.repo_full_name}-${i}`}
+              className="rounded-xl p-4 transition-all animate-fade-up"
+              style={{
+                background: SURFACE,
+                border: BORDER,
+                animationDelay: `${i * 60}ms`,
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(139,92,246,0.25)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = BORDER;
+              }}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`https://github.com/${r.repo_full_name.split("/")[0]}.png?size=24`}
+                    alt=""
+                    width={20}
+                    height={20}
+                    className="rounded-full"
+                    style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <Link
+                    href={`/projects/${r.repo_full_name}`}
+                    className="font-semibold text-sm hover:underline"
+                    style={{ color: "#8B5CF6" }}
+                  >
+                    {r.repo_full_name}
+                  </Link>
+                  <RecBadge rec={r.recommendation} />
+                  {r.health_score !== null && (
+                    <HealthBadge score={r.health_score} size="sm" />
+                  )}
+                </div>
+                {/* Match confidence */}
+                <span
+                  className="text-xs font-mono px-2 py-0.5 rounded shrink-0"
+                  style={{
+                    color: isHighMatch ? "#00E676" : "#FBBF24",
+                    background: isHighMatch ? "rgba(0,230,118,0.08)" : "rgba(251,191,36,0.08)",
+                    border: `1px solid ${isHighMatch ? "rgba(0,230,118,0.2)" : "rgba(251,191,36,0.2)"}`,
+                  }}
+                >
+                  {confidence}% match
+                </span>
+              </div>
+
+              {r.excerpt && (
+                <p
+                  className="text-xs leading-relaxed pl-3 mb-3"
+                  style={{
+                    color: "#8B9BB4",
+                    borderLeft: "2px solid rgba(139,92,246,0.4)",
+                  }}
+                >
+                  {r.excerpt}
+                </p>
+              )}
+
+              <div className="flex items-center justify-between">
+                {r.report_date && (
+                  <span className="text-xs" style={{ color: "#4B5563" }}>{r.report_date}</span>
+                )}
                 <Link
                   href={`/projects/${r.repo_full_name}`}
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="text-xs ml-auto"
+                  style={{ color: "#8B5CF6" }}
                 >
-                  {r.repo_full_name}
+                  View Detail →
                 </Link>
-                <RecBadge rec={r.recommendation} />
-                {r.health_score !== null && (
-                  <HealthBadge score={r.health_score} size="sm" />
-                )}
               </div>
-              <span className="text-xs text-gray-400 font-mono">
-                {(r.similarity_score * 100).toFixed(1)}% match
-              </span>
             </div>
-            {r.excerpt && (
-              <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-blue-200 pl-3">
-                {r.excerpt}
-              </p>
-            )}
-            <div className="flex items-center justify-between mt-3">
-              {r.report_date && (
-                <span className="text-xs text-gray-400">{r.report_date}</span>
-              )}
-              <Link
-                href={`/projects/${r.repo_full_name}`}
-                className="text-xs text-blue-600 hover:underline ml-auto"
-              >
-                View Detail →
-              </Link>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
