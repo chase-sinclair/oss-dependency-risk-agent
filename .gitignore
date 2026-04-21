@@ -77,6 +77,11 @@ local_data/
 .ipynb_checkpoints/
 *.ipynb
 
+# ── Next.js ───────────────────────────────────────────────────────────────────
+frontend-next/node_modules/
+frontend-next/.next/
+frontend-next/.env.local
+
 # ── Streamlit ─────────────────────────────────────────────────────────────────
 .streamlit/secrets.toml
 
