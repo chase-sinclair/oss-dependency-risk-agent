@@ -93,8 +93,8 @@ export default function AgentPage() {
       const res = await runAgent({
         dry_run: dryRun,
         limit:     limit === "" ? null : Number(limit),
-        min_score: minScore > 0 ? minScore : null,
-        max_score: maxScore < 10 ? maxScore : null,
+        min_score: minScore,
+        max_score: maxScore,
       });
 
       pollRef.current = setInterval(async () => {

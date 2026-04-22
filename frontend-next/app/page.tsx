@@ -196,13 +196,21 @@ export default function HomePage() {
         <KpiCard
           label="Critical Risks"
           value={summary?.critical_count ?? "—"}
-          sub={`${summary?.warning_count ?? "—"} warnings`}
+          sub={
+            summary?.total_projects && summary.total_projects > 0
+              ? `${Math.round(((summary.critical_count ?? 0) / summary.total_projects) * 100)}% of portfolio`
+              : undefined
+          }
           glow="crimson"
         />
         <KpiCard
           label="Avg Health Score"
           value={summary?.avg_health_score?.toFixed(1) ?? "—"}
-          sub={`${summary?.projects_assessed_count ?? 0} AI assessed`}
+          sub={
+            summary?.projects_assessed_count != null && summary?.total_projects != null
+              ? `${summary.projects_assessed_count} of ${summary.total_projects} AI analyzed`
+              : undefined
+          }
           glow="emerald"
         />
       </div>

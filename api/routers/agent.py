@@ -37,9 +37,16 @@ def _parse_summary(filename: str) -> AgentRunSummary:
     try:
         content = path.read_text(encoding="utf-8", errors="replace")
         assessed = len(re.findall(r"^### .+", content, re.MULTILINE))
-        replace_count = content.upper().count("REPLACE")
-        upgrade_count = content.upper().count("UPGRADE")
-        monitor_count = content.upper().count("MONITOR")
+        # Parse the canonical summary line: **Summary:** N REPLACE  |  N UPGRADE  |  N MONITOR
+        m = re.search(
+            r"\*\*Summary:\*\*\s+(\d+)\s+REPLACE\s+\|[^|]*(\d+)\s+UPGRADE\s+\|[^|]*(\d+)\s+MONITOR",
+            content,
+            re.IGNORECASE,
+        )
+        if m:
+            replace_count = int(m.group(1))
+            upgrade_count = int(m.group(2))
+            monitor_count = int(m.group(3))
     except OSError:
         pass
     return AgentRunSummary(

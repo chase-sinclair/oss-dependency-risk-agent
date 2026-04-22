@@ -8,6 +8,33 @@ import type { HealthScore } from "@/types/api";
 import HealthBadge from "@/components/HealthBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
+function renderAssessmentMarkdown(text: string): string {
+  function esc(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function inline(s: string): string {
+    return esc(s)
+      .replace(/\*\*(.+?)\*\*/g, "<strong style='color:#F0F6FC'>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em style='color:#A3B3C8'>$1</em>")
+      .replace(/`([^`]+)`/g, `<code style='background:rgba(139,92,246,0.15);color:#8B5CF6;padding:1px 5px;border-radius:3px;font-family:JetBrains Mono,monospace;font-size:11px'>$1</code>`);
+  }
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith("#### "))
+      out.push(`<p style='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#8B5CF6;margin:14px 0 4px'>${inline(line.slice(5))}</p>`);
+    else if (line.startsWith("- ") || line.startsWith("* "))
+      out.push(`<div style='display:flex;gap:8px;margin:3px 0'><span style='color:#8B5CF6;margin-top:1px;font-size:10px'>▸</span><span style='font-size:12px;color:#8B9BB4;line-height:1.6'>${inline(line.slice(2))}</span></div>`);
+    else if (line.trim() === "---")
+      out.push(`<hr style='border:none;border-top:1px solid rgba(255,255,255,0.06);margin:12px 0'/>`);
+    else if (line.trim() === "")
+      out.push(`<div style='height:6px'></div>`);
+    else
+      out.push(`<p style='font-size:12px;line-height:1.7;color:#8B9BB4;margin:2px 0'>${inline(line)}</p>`);
+  }
+  return out.join("\n");
+}
+
 const BORDER  = "rgba(255,255,255,0.08)";
 const SURFACE = "rgba(22,27,34,0.7)";
 
@@ -198,16 +225,11 @@ export default function ProjectDetailPage() {
                 {repoName}.assessment
               </span>
             </div>
-            <pre
-              className="p-5 text-sm leading-relaxed whitespace-pre-wrap overflow-x-auto scrollbar-dark"
-              style={{
-                background: "#060A0F",
-                color: "#8B9BB4",
-                fontFamily: "'JetBrains Mono', 'Courier New', monospace",
-              }}
-            >
-              {assessment}
-            </pre>
+            <div
+              className="p-5 overflow-x-auto scrollbar-dark"
+              style={{ background: "#060A0F" }}
+              dangerouslySetInnerHTML={{ __html: renderAssessmentMarkdown(assessment) }}
+            />
           </div>
         ) : (
           <div

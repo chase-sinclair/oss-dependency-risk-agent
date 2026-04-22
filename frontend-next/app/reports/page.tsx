@@ -57,13 +57,28 @@ function renderMarkdown(text: string): string {
 /* ── Parse recommendation distribution from report text ─────────────────────── */
 
 function parseDistribution(text: string): { replace: number; upgrade: number; monitor: number } {
+  // Primary: parse the canonical summary line written by the agent:
+  //   **Summary:** N REPLACE  |  N UPGRADE  |  N MONITOR
+  const m = text.match(
+    /\*\*Summary:\*\*\s+(\d+)\s+REPLACE\s+\|[^|]*(\d+)\s+UPGRADE\s+\|[^|]*(\d+)\s+MONITOR/i
+  );
+  if (m) {
+    return {
+      replace: parseInt(m[1], 10),
+      upgrade: parseInt(m[2], 10),
+      monitor: parseInt(m[3], 10),
+    };
+  }
+  // Fallback: count ### project headers under each section heading
   const recs = { replace: 0, upgrade: 0, monitor: 0 };
-  const lines = text.split("\n");
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.includes("recommendation: replace") || lower.includes("**replace**")) recs.replace++;
-    else if (lower.includes("recommendation: upgrade") || lower.includes("**upgrade**")) recs.upgrade++;
-    else if (lower.includes("recommendation: monitor") || lower.includes("**monitor**")) recs.monitor++;
+  let current: "replace" | "upgrade" | "monitor" | null = null;
+  for (const line of text.split("\n")) {
+    if (/^##\s/.test(line)) {
+      const lower = line.toLowerCase();
+      current = lower.includes("replace") ? "replace" : lower.includes("upgrade") ? "upgrade" : lower.includes("monitor") ? "monitor" : null;
+    } else if (/^###\s/.test(line) && current) {
+      recs[current]++;
+    }
   }
   return recs;
 }
@@ -186,14 +201,19 @@ export default function ReportsPage() {
   const [error, setError]               = useState<string | null>(null);
   const [distMap, setDistMap]           = useState<Map<string, { replace: number; upgrade: number; monitor: number }>>(new Map());
 
-  useEffect(() => {
+  function loadReportList(autoSelectFirst = false) {
+    setLoadingList(true);
     getReports()
       .then((rs) => {
         setReports(rs);
-        if (rs.length > 0) selectReport(rs[0]);
+        if (autoSelectFirst && rs.length > 0) selectReport(rs[0]);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load reports"))
       .finally(() => setLoadingList(false));
+  }
+
+  useEffect(() => {
+    loadReportList(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -225,12 +245,23 @@ export default function ReportsPage() {
         className="w-64 p-4 overflow-y-auto shrink-0 scrollbar-dark"
         style={{ borderRight: BORDER }}
       >
-        <h2
-          className="text-xs font-semibold uppercase tracking-widest mb-4"
-          style={{ color: "#8B9BB4" }}
-        >
-          Intelligence Archive
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2
+            className="text-xs font-semibold uppercase tracking-widest"
+            style={{ color: "#8B9BB4" }}
+          >
+            Intelligence Archive
+          </h2>
+          <button
+            onClick={() => loadReportList(false)}
+            disabled={loadingList}
+            className="text-xs px-2 py-1 rounded transition-colors disabled:opacity-40"
+            style={{ color: "#8B5CF6", border: "1px solid rgba(139,92,246,0.2)" }}
+            title="Refresh report list"
+          >
+            ↻
+          </button>
+        </div>
         {reports.length === 0 && (
           <p className="text-xs" style={{ color: "#4B5563" }}>
             No reports found. Run the agent to generate reports.
