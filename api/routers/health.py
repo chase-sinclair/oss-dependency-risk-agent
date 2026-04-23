@@ -35,6 +35,13 @@ def _cast(row: dict) -> HealthScore:
         except (ValueError, TypeError):
             return None
 
+    def _b(v: object) -> Optional[bool]:
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return v
+        return str(v).lower() in ("true", "1")
+
     return HealthScore(
         repo_full_name=row.get("repo_full_name") or "",
         org_name=row.get("org_name"),
@@ -46,6 +53,7 @@ def _cast(row: dict) -> HealthScore:
         contributor_score=_f(row.get("contributor_score")),
         bus_factor_score=_f(row.get("bus_factor_score")),
         data_days_available=_i(row.get("data_days_available")),
+        has_push_data=_b(row.get("has_push_data")),
         computed_at=row.get("computed_at"),
     )
 
@@ -72,7 +80,7 @@ def get_health_scores(
             repo_full_name, org_name, health_score,
             commit_score, issue_score, pr_score,
             contributor_score, bus_factor_score,
-            data_days_available, computed_at
+            data_days_available, has_push_data, computed_at
         FROM {_TABLE}
         {where}
         ORDER BY CAST(health_score AS DOUBLE) {direction}
@@ -97,7 +105,7 @@ def get_project(org: str, repo: str) -> HealthScore:
             repo_full_name, org_name, health_score,
             commit_score, issue_score, pr_score,
             contributor_score, bus_factor_score,
-            data_days_available, computed_at
+            data_days_available, has_push_data, computed_at
         FROM {_TABLE}
         WHERE repo_full_name = '{repo_full_name}'
         LIMIT 1

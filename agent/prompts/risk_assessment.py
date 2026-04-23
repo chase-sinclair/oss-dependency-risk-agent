@@ -25,6 +25,7 @@ def build_risk_assessment_prompt(
     repo_full_name: str,
     health_scores: dict,
     github_signals: dict,
+    has_push_data: bool = True,
 ) -> str:
     """
     Build the user message for a single project risk assessment.
@@ -71,19 +72,27 @@ def build_risk_assessment_prompt(
     issues_str   = f"{int(open_issues):,}" if open_issues is not None else "N/A"
     forks_str    = f"{int(forks):,}"       if forks       is not None else "N/A"
 
+    push_data_note = (
+        "\n> **Data coverage notice:** No PushEvents were found for this repository in the "
+        "current scoring window. Commit frequency and contributor diversity scores are set "
+        "to 5.0 (neutral fallback) — they do **not** reflect real activity. Do not cite "
+        "these two metrics as evidence of health or risk; treat them as unavailable.\n"
+        if not has_push_data else ""
+    )
+
     return f"""\
 Assess the dependency risk for: {repo_full_name}
 
 ## Quantitative Health Metrics (0-10 scale, higher is healthier)
-
-| Signal | Score |
-|---|---|
-| Overall health score | {fmt(health_scores.get('health_score'))} |
-| Commit frequency | {fmt(health_scores.get('commit_score'))} |
-| Issue resolution rate | {fmt(health_scores.get('issue_score'))} |
-| PR merge rate | {fmt(health_scores.get('pr_score'))} |
-| Contributor diversity | {fmt(health_scores.get('contributor_score'))} |
-| Bus factor (inverted) | {fmt(health_scores.get('bus_factor_score'))} |
+{push_data_note}
+| Signal | Score | Notes |
+|---|---|---|
+| Overall health score | {fmt(health_scores.get('health_score'))} | |
+| Commit frequency | {fmt(health_scores.get('commit_score'))} | {'estimated — no push data' if not has_push_data else ''} |
+| Issue resolution rate | {fmt(health_scores.get('issue_score'))} | |
+| PR merge rate | {fmt(health_scores.get('pr_score'))} | |
+| Contributor diversity | {fmt(health_scores.get('contributor_score'))} | {'estimated — no push data' if not has_push_data else ''} |
+| Bus factor (inverted) | {fmt(health_scores.get('bus_factor_score'))} | |
 
 Month-over-month health trend: {fmt(health_scores.get('health_trend'))} \
 (positive = improving, negative = deteriorating)

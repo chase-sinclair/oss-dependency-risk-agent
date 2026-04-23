@@ -289,7 +289,7 @@ class DatabricksClient:
 
         response = self._sdk.jobs.run_now(
             job_id=job_id,
-            notebook_params=notebook_params or {},
+            job_parameters=notebook_params or {},
         )
         run_id = response.run_id
         run_url = self.get_run_url(run_id)

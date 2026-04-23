@@ -9,6 +9,7 @@ export interface HealthScore {
   contributor_score: number | null;
   bus_factor_score: number | null;
   data_days_available: number | null;
+  has_push_data: boolean | null;
   computed_at: string | null;
 }
 

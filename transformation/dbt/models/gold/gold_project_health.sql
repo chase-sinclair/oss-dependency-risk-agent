@@ -84,12 +84,13 @@ select
     m.first_event_date,
     m.last_event_date,
 
-    -- Commit activity (0 when no PushEvents)
-    coalesce(c.push_event_count,  0)   as push_event_count,
-    coalesce(c.total_commits,     0)   as total_commits,
-    coalesce(c.active_committers, 0)   as active_committers,
-    coalesce(c.active_days,       0)   as active_days,
-    coalesce(c.commits_per_week,  0.0) as commits_per_week,
+    -- Commit activity (NULL when no PushEvents — preserved so gold_health_scores
+    -- can apply the 5.0 neutral fallback instead of scoring 0)
+    coalesce(c.push_event_count,  0) as push_event_count,
+    coalesce(c.total_commits,     0) as total_commits,
+    coalesce(c.active_committers, 0) as active_committers,
+    coalesce(c.active_days,       0) as active_days,
+    c.commits_per_week,
 
     -- Issue health (null when no IssuesEvents)
     coalesce(i.issues_opened, 0)       as issues_opened,
@@ -102,7 +103,7 @@ select
     p.pr_merge_rate,
 
     -- Contributor diversity (null when no PushEvents)
-    coalesce(d.contributor_count, 0)   as contributor_count,
+    d.contributor_count,
     d.bus_factor_risk,
 
     current_timestamp()                as computed_at

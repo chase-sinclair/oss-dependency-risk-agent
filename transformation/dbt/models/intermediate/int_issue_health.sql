@@ -7,11 +7,12 @@
   Key metrics:
     - issues_opened         : total issues opened
     - issues_closed         : total issues closed
-    - issue_resolution_rate : issues_closed / issues_opened  (0.0 – ∞, ideally >= 1.0)
+    - issue_resolution_rate : issues_closed / MIN(issues_opened, issues_closed * 3)
 
-  Note: resolution rate > 1.0 means the project is closing backlog issues
-  faster than new ones arrive, which is healthy.  The gold scoring layer
-  caps the normalised score at 10.
+  The denominator is capped at issues_closed * 3 so high-volume projects with
+  large structural backlogs (e.g. 5k open, 1k closed) are not unfairly penalised.
+  Without the cap, such a project would score 0.2; with it the floor is 1/3 = 0.33.
+  Rate > 1.0 means the project is closing backlog faster than new issues arrive.
 */
 
 with issue_events as (
@@ -47,6 +48,11 @@ select
     *,
     case
         when issues_opened = 0 then null
-        else round(cast(issues_closed as double) / issues_opened, 4)
+        when issues_closed  = 0 then 0.0
+        else round(
+            cast(issues_closed as double)
+            / least(issues_opened, issues_closed * 3),
+            4
+        )
     end as issue_resolution_rate
 from aggregated

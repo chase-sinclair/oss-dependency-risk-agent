@@ -4,7 +4,7 @@ Write-Host "Running pipeline for $today"
 
 python scripts\run_ingestion.py --date $today
 python scripts\run_silver.py --trigger --wait
-python scripts\run_dbt.py --run --test
+python scripts\run_gold_models.py
 python scripts\run_agent.py --limit 10
 python scripts\run_indexer.py
 

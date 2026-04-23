@@ -1,12 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getProject, getReports, getReport } from "@/lib/api";
 import type { HealthScore } from "@/types/api";
 import HealthBadge from "@/components/HealthBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
+
+function BackBanner() {
+  const params = useSearchParams();
+  if (params.get("from") !== "onboard") return null;
+  return (
+    <Link
+      href="/onboard"
+      className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg mb-6 transition-colors"
+      style={{
+        color: "#8B5CF6",
+        background: "rgba(139,92,246,0.08)",
+        border: "1px solid rgba(139,92,246,0.2)",
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      Back to onboard results
+    </Link>
+  );
+}
 
 function formatDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -50,9 +71,10 @@ const SURFACE = "rgba(22,27,34,0.7)";
 interface Metric {
   label: string;
   value: number | null;
+  estimated?: boolean;
 }
 
-function MetricCard({ label, value }: Metric) {
+function MetricCard({ label, value, estimated }: Metric) {
   const score = value ?? 0;
   const barColor =
     score >= 7 ? "#00E676" :
@@ -64,9 +86,26 @@ function MetricCard({ label, value }: Metric) {
       className="rounded-xl p-4"
       style={{ background: SURFACE, border: BORDER }}
     >
-      <p className="text-xs uppercase tracking-wider mb-2" style={{ color: "#8B9BB4" }}>
-        {label}
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs uppercase tracking-wider" style={{ color: "#8B9BB4" }}>
+          {label}
+        </p>
+        {estimated && (
+          <span
+            className="text-xs px-1.5 py-0.5 rounded"
+            style={{
+              color: "#D97706",
+              background: "rgba(217,119,6,0.12)",
+              border: "1px solid rgba(217,119,6,0.25)",
+              fontSize: "10px",
+              fontWeight: 500,
+              letterSpacing: "0.02em",
+            }}
+          >
+            No push data
+          </span>
+        )}
+      </div>
       <div className="flex items-center gap-2 mb-3">
         <span
           className="text-2xl font-bold font-mono"
@@ -146,17 +185,21 @@ export default function ProjectDetailPage() {
   if (error)   return <div className="p-8 text-sm" style={{ color: "#FF4C4C" }}>Error: {error}</div>;
   if (!project) return <div className="p-8 text-sm" style={{ color: "#8B9BB4" }}>Project not found.</div>;
 
+  const noPush = project.has_push_data === false;
   const metrics: Metric[] = [
-    { label: "Commit Frequency",   value: project.commit_score },
-    { label: "Issue Resolution",   value: project.issue_score },
-    { label: "PR Merge Rate",      value: project.pr_score },
-    { label: "Contributor Diversity", value: project.contributor_score },
-    { label: "Bus Factor",         value: project.bus_factor_score },
-    { label: "Overall Health",     value: project.health_score },
+    { label: "Commit Frequency",      value: project.commit_score,      estimated: noPush },
+    { label: "Issue Resolution",      value: project.issue_score },
+    { label: "PR Merge Rate",         value: project.pr_score },
+    { label: "Contributor Diversity", value: project.contributor_score, estimated: noPush },
+    { label: "Bus Factor",            value: project.bus_factor_score },
+    { label: "Overall Health",        value: project.health_score },
   ];
 
   return (
     <div className="p-8 max-w-4xl" style={{ color: "#F0F6FC" }}>
+      <Suspense fallback={null}>
+        <BackBanner />
+      </Suspense>
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-3">

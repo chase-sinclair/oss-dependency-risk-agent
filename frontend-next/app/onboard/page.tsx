@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { onboardManifest } from "@/lib/api";
 import type { AddedProject, OnboardResponse, ReadyProject, UnresolvedPackage } from "@/types/api";
@@ -97,7 +97,7 @@ function ReadyCard({ p }: { p: ReadyProject }) {
           </span>
         )}
         <Link
-          href={`/projects/${p.org}/${p.repo}`}
+          href={`/projects/${p.org}/${p.repo}?from=onboard`}
           className="text-xs px-3 py-1 rounded transition-colors"
           style={{ color: "#00E676", border: "1px solid rgba(0,230,118,0.25)", background: "rgba(0,230,118,0.06)" }}
         >
@@ -187,6 +187,8 @@ function UnresolvedCard({ p }: { p: UnresolvedPackage }) {
 
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
+const SESSION_KEY = "onboard_result";
+
 export default function OnboardPage() {
   const [file, setFile]         = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -195,10 +197,19 @@ export default function OnboardPage() {
   const [error, setError]       = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Restore results from sessionStorage on mount (back-navigation)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (saved) setResult(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, []);
+
   const acceptFile = useCallback((f: File) => {
     setFile(f);
     setResult(null);
     setError(null);
+    sessionStorage.removeItem(SESSION_KEY);
   }, []);
 
   function onDrop(e: React.DragEvent) {
@@ -215,6 +226,7 @@ export default function OnboardPage() {
     try {
       const res = await onboardManifest(file);
       setResult(res);
+      try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(res)); } catch { /* ignore */ }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Discovery failed");
     } finally {
@@ -284,7 +296,7 @@ export default function OnboardPage() {
               </div>
             </div>
             <button
-              onClick={e => { e.stopPropagation(); setFile(null); setResult(null); }}
+              onClick={e => { e.stopPropagation(); setFile(null); setResult(null); sessionStorage.removeItem(SESSION_KEY); }}
               className="text-xs px-3 py-1 rounded transition-colors"
               style={{ color: "#8B9BB4", border: "1px solid rgba(255,255,255,0.08)" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#FF4C4C"; }}

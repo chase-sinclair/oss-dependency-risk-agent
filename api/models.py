@@ -15,6 +15,7 @@ class HealthScore(BaseModel):
     contributor_score: Optional[float] = None
     bus_factor_score: Optional[float] = None
     data_days_available: Optional[int] = None
+    has_push_data: Optional[bool] = None
     computed_at: Optional[str] = None
 
 

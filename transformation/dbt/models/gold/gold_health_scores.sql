@@ -12,11 +12,13 @@
     bus_factor_risk       15%
 
   Normalisation to 0-10:
-    commit_score      : min(commits_per_week / 10.0, 1.0) * 10   (cap at 10 commits/week)
-    issue_score       : min(issue_resolution_rate, 1.0) * 10      (rate > 1.0 is capped)
+    commit_score      : log10(1 + cpw*50) / log10(501) * 10  (logarithmic; 1/mo→4, 5/mo→6, 20/mo→9, cap at 10)
+    issue_score       : min(rate, 1.0) * 10  where rate = closed / min(opened, closed*3)
     pr_score          : min(pr_merge_rate, 1.0) * 10
     contributor_score : min(contributor_count / 20.0, 1.0) * 10   (20+ contributors = max)
     bus_factor_score  : (1.0 - bus_factor_risk) * 10               (inverted: lower risk = better)
+
+  Composite weights: commit=0.15, issue=0.20, pr=0.25, contributor=0.20, bus_factor=0.20
 
   Null handling: metrics with no data default to 5.0 (neutral) so a single
   absent signal does not collapse the overall score.
@@ -45,9 +47,17 @@ normalised as (
         last_event_date,
         computed_at,
 
-        -- Commit frequency: 10 commits/week -> score 10
-        round(least(commits_per_week / 10.0, 1.0) * 10.0, 2)
-            as commit_score,
+        -- Data coverage flag: false means commit/contributor scores are 5.0 fallbacks
+        (commits_per_week is not null) as has_push_data,
+
+        -- Commit frequency: logarithmic scale — 1/mo≈4, 5/mo≈6, 20/mo≈9, ≥40/mo→10
+        round(
+            case
+                when commits_per_week is null then 5.0
+                else least(log10(1.0 + commits_per_week * 50.0) / log10(501.0) * 10.0, 10.0)
+            end,
+            2
+        ) as commit_score,
 
         -- Issue resolution rate: 1.0 (closed = opened) -> score 10
         round(
@@ -68,8 +78,13 @@ normalised as (
         ) as pr_score,
 
         -- Contributor diversity: 20+ distinct contributors -> score 10
-        round(least(cast(contributor_count as double) / 20.0, 1.0) * 10.0, 2)
-            as contributor_score,
+        round(
+            case
+                when contributor_count is null then 5.0
+                else least(cast(contributor_count as double) / 20.0, 1.0) * 10.0
+            end,
+            2
+        ) as contributor_score,
 
         -- Bus factor (inverted): 0.0 risk -> score 10, 1.0 risk -> score 0
         round(
@@ -89,11 +104,11 @@ scored as (
     select
         *,
         round(
-              commit_score      * 0.25
+              commit_score      * 0.15
             + issue_score       * 0.20
-            + pr_score          * 0.20
+            + pr_score          * 0.25
             + contributor_score * 0.20
-            + bus_factor_score  * 0.15,
+            + bus_factor_score  * 0.20,
             2
         ) as health_score
     from normalised
@@ -115,5 +130,6 @@ select
     pr_score,
     contributor_score,
     bus_factor_score,
+    has_push_data,
     computed_at
 from scored

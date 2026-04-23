@@ -90,10 +90,13 @@ def synthesize(state: AgentState) -> dict:
             continue
 
         health_scores = health_lookup.get(repo, {})
+        raw_push = health_scores.get("has_push_data")
+        has_push = raw_push if isinstance(raw_push, bool) else str(raw_push).lower() not in ("false", "0", "none", "")
         prompt = build_risk_assessment_prompt(
             repo_full_name=repo,
             health_scores=health_scores,
             github_signals=signals,
+            has_push_data=has_push,
         )
 
         logger.info("synthesize: calling Claude for %s", repo)

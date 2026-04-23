@@ -14,7 +14,11 @@
       "Bash(.venv/Scripts/python -c ':*)",
       "Bash(.venv/Scripts/python scripts/run_dbt.py --test)",
       "Bash(.venv/Scripts/python scripts/run_dbt.py --run --test)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(.venv/Scripts/pip install *)",
+      "Bash(npx tsc *)",
+      "Bash(DBT_PROFILES_DIR=transformation/dbt/profiles .venv/Scripts/dbt run *)"
     ]
   }
 }

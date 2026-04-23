@@ -32,6 +32,7 @@ SELECT
     bus_factor_score,
     health_trend,
     data_days_available,
+    has_push_data,
     first_event_date,
     last_event_date
 FROM {catalog}.{schema}.gold_health_scores
