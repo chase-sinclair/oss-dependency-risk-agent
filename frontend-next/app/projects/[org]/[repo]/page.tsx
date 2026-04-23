@@ -8,6 +8,15 @@ import type { HealthScore } from "@/types/api";
 import HealthBadge from "@/components/HealthBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
+function formatDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${date} ${time}`;
+}
+
 function renderAssessmentMarkdown(text: string): string {
   function esc(s: string): string {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -165,7 +174,7 @@ export default function ProjectDetailPage() {
             <h1 className="text-2xl font-bold">{repoName}</h1>
             {project.computed_at && (
               <p className="text-xs mt-0.5" style={{ color: "#8B9BB4" }}>
-                Scored: {project.computed_at}
+                Scored: {formatDate(project.computed_at) ?? project.computed_at}
               </p>
             )}
           </div>

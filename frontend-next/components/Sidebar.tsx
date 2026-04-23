@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV = [
-  { href: "/",          label: "Command Center",  icon: "⬡" },
-  { href: "/dashboard", label: "Health Dashboard", icon: "◈" },
-  { href: "/search",    label: "Semantic Search",  icon: "◎" },
-  { href: "/reports",   label: "Intel Reports",    icon: "◻" },
-  { href: "/agent",     label: "Agent Control",    icon: "◆" },
+  { href: "/",          label: "Command Center",       icon: "⬡" },
+  { href: "/dashboard", label: "Health Dashboard",      icon: "◈" },
+  { href: "/search",    label: "Semantic Search",       icon: "◎" },
+  { href: "/reports",   label: "Intel Reports",         icon: "◻" },
+  { href: "/agent",     label: "Agent Control",         icon: "◆" },
+  { href: "/onboard",   label: "Onboard Dependencies",  icon: "⊕" },
 ];
 
 export default function Sidebar() {

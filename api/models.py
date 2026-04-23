@@ -75,3 +75,31 @@ class AgentStatus(BaseModel):
     status: str  # "running" | "complete" | "failed"
     summary: Optional[AgentRunSummary] = None
     report_filename: Optional[str] = None
+
+
+class ReadyProject(BaseModel):
+    org: str
+    repo: str
+    package_name: str
+    ecosystem: str
+    health_score: Optional[float] = None   # None = monitored but not yet scored
+
+
+class AddedProject(BaseModel):
+    org: str
+    repo: str
+    package_name: str
+    ecosystem: str
+    confidence: str  # high | low
+
+
+class UnresolvedPackage(BaseModel):
+    name: str
+    reason: str = "not found"
+
+
+class OnboardResponse(BaseModel):
+    parsed_count: int
+    ready_projects: list[ReadyProject]
+    added_projects: list[AddedProject]
+    unresolved_packages: list[UnresolvedPackage]

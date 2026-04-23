@@ -17,7 +17,7 @@ import threading
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agent, health, reports, search
+from api.routers import agent, health, onboard, reports, search
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(reports.router, prefix="/api", tags=["reports"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(agent.router, prefix="/api", tags=["agent"])
+app.include_router(onboard.router, prefix="/api", tags=["onboard"])
 
 
 def _warmup_databricks() -> None:

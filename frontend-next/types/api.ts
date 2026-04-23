@@ -70,3 +70,31 @@ export interface AgentStatus {
   summary: AgentRunSummary | null;
   report_filename: string | null;
 }
+
+export interface ReadyProject {
+  org: string;
+  repo: string;
+  package_name: string;
+  ecosystem: string;
+  health_score: number | null;
+}
+
+export interface AddedProject {
+  org: string;
+  repo: string;
+  package_name: string;
+  ecosystem: string;
+  confidence: string;
+}
+
+export interface UnresolvedPackage {
+  name: string;
+  reason: string;
+}
+
+export interface OnboardResponse {
+  parsed_count: number;
+  ready_projects: ReadyProject[];
+  added_projects: AddedProject[];
+  unresolved_packages: UnresolvedPackage[];
+}

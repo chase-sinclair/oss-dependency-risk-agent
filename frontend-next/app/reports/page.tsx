@@ -15,11 +15,20 @@ function renderMarkdown(text: string): string {
   function esc(s: string): string {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
+  function fmtIso(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return `${date} ${time}`;
+  }
+
   function inline(s: string): string {
     return esc(s)
       .replace(/\*\*(.+?)\*\*/g, "<strong style='color:#F0F6FC'>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/`([^`]+)`/g, `<code style='background:rgba(139,92,246,0.1);color:#8B5CF6;padding:1px 4px;border-radius:3px;font-family:JetBrains Mono,monospace;font-size:11px'>$1</code>`);
+      .replace(/`([^`]+)`/g, `<code style='background:rgba(139,92,246,0.1);color:#8B5CF6;padding:1px 4px;border-radius:3px;font-family:JetBrains Mono,monospace;font-size:11px'>$1</code>`)
+      .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\s<]*/g, (m) => fmtIso(m));
   }
 
   const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -197,19 +206,28 @@ export default function ReportsPage() {
   const [selected, setSelected]         = useState<ReportMeta | null>(null);
   const [content, setContent]           = useState<string>("");
   const [loadingList, setLoadingList]   = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
   const [loadingContent, setLoadingContent] = useState(false);
   const [error, setError]               = useState<string | null>(null);
   const [distMap, setDistMap]           = useState<Map<string, { replace: number; upgrade: number; monitor: number }>>(new Map());
 
   function loadReportList(autoSelectFirst = false) {
-    setLoadingList(true);
+    // Initial load shows full spinner; manual refresh just spins the button
+    const isInitial = loadingList || reports.length === 0;
+    if (isInitial) setLoadingList(true);
+    else setRefreshing(true);
+
+    const prevCount = reports.length;
     getReports()
       .then((rs) => {
         setReports(rs);
-        if (autoSelectFirst && rs.length > 0) selectReport(rs[0]);
+        // Auto-select on first load, or when a new report has appeared
+        if ((autoSelectFirst || rs.length > prevCount) && rs.length > 0) {
+          selectReport(rs[0]);
+        }
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load reports"))
-      .finally(() => setLoadingList(false));
+      .finally(() => { setLoadingList(false); setRefreshing(false); });
   }
 
   useEffect(() => {
@@ -254,12 +272,12 @@ export default function ReportsPage() {
           </h2>
           <button
             onClick={() => loadReportList(false)}
-            disabled={loadingList}
+            disabled={refreshing}
             className="text-xs px-2 py-1 rounded transition-colors disabled:opacity-40"
             style={{ color: "#8B5CF6", border: "1px solid rgba(139,92,246,0.2)" }}
             title="Refresh report list"
           >
-            ↻
+            <span className={refreshing ? "inline-block animate-spin" : ""}>↻</span>
           </button>
         </div>
         {reports.length === 0 && (
