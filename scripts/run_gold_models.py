@@ -1,5 +1,5 @@
 """
-Run all 7 dbt models directly via the Databricks REST API.
+Run all 9 dbt models directly via the Databricks REST API.
 
 Replaces `dbt run` for this warehouse, which only accepts REST connections
 (Databricks SDK) and rejects the Thrift connections used by databricks-sql-connector.
@@ -10,8 +10,10 @@ Execution order matches the dbt DAG:
   3. int_issue_health            (VIEW  — IssuesEvent aggregates)
   4. int_pr_health               (VIEW  — PullRequestEvent aggregates)
   5. int_contributor_diversity   (VIEW  — bus factor over PushEvents)
-  6. gold_project_health         (DELTA TABLE — wide metrics per project)
-  7. gold_health_scores          (DELTA TABLE — composite 0-10 scores + flags)
+  6. int_governance              (VIEW  — governance score from github_scorecard)
+  7. int_security                (VIEW  — security score from github_scorecard + OSV)
+  8. gold_project_health         (DELTA TABLE — wide metrics per project)
+  9. gold_health_scores          (DELTA TABLE — composite 0-10 scores + flags)
 
 Usage:
     python scripts/run_gold_models.py
@@ -221,7 +223,75 @@ left join top3 on t.repo_full_name = top3.repo_full_name
 
 
 # ---------------------------------------------------------------------------
-# 6. gold_project_health  (DELTA TABLE)
+# 6. int_governance  (VIEW)
+# ---------------------------------------------------------------------------
+
+INT_GOVERNANCE_SQL = f"""
+CREATE OR REPLACE VIEW {fqn("int_governance")} AS
+with scorecard as (
+    select * from {fqn("github_scorecard")}
+),
+scored as (
+    select
+        repo_full_name,
+        is_maintained,
+        has_license,
+        is_branch_protected,
+        requires_code_review,
+        has_security_policy,
+        round(
+            (
+                  (case when is_maintained        = true then 4 else 0 end)
+                + (case when has_license           = true then 2 else 0 end)
+                + (case when is_branch_protected   = true then 2 else 0 end)
+                + (case when requires_code_review  = true then 2 else 0 end)
+                + (case when has_security_policy   = true then 2 else 0 end)
+            ) / 12.0 * 10.0,
+            2
+        ) as governance_score
+    from scorecard
+)
+select * from scored
+"""
+
+
+# ---------------------------------------------------------------------------
+# 7. int_security  (VIEW)
+# ---------------------------------------------------------------------------
+
+INT_SECURITY_SQL = f"""
+CREATE OR REPLACE VIEW {fqn("int_security")} AS
+with scorecard as (
+    select * from {fqn("github_scorecard")}
+),
+scored as (
+    select
+        repo_full_name,
+        vuln_count,
+        vuln_data_available,
+        has_dep_update_tool,
+        round(
+            case
+                when not vuln_data_available or vuln_count is null then 5.0
+                else greatest(0.0, 10.0 - cast(vuln_count as double) * 2.0)
+            end, 2
+        ) as vuln_score,
+        round(
+            case when has_dep_update_tool = true then 10.0 else 0.0 end, 2
+        ) as dep_update_score
+    from scorecard
+),
+final as (
+    select *,
+        round(vuln_score * 0.6 + dep_update_score * 0.4, 2) as security_score
+    from scored
+)
+select * from final
+"""
+
+
+# ---------------------------------------------------------------------------
+# 8. gold_project_health  (DELTA TABLE)
 # ---------------------------------------------------------------------------
 
 GOLD_PROJECT_HEALTH_SQL = f"""
@@ -253,6 +323,17 @@ pr_health as (
 contributor_diversity as (
     select repo_full_name, contributor_count, bus_factor_risk
     from {fqn("int_contributor_diversity")}
+),
+governance as (
+    select repo_full_name, governance_score,
+           is_maintained, has_license, is_branch_protected,
+           requires_code_review, has_security_policy
+    from {fqn("int_governance")}
+),
+security as (
+    select repo_full_name, security_score,
+           vuln_count, vuln_data_available, has_dep_update_tool
+    from {fqn("int_security")}
 )
 select
     m.repo_full_name, m.org_name, m.repo_name,
@@ -275,6 +356,18 @@ select
     d.contributor_count,
     d.bus_factor_risk,
 
+    g.governance_score,
+    g.is_maintained,
+    g.has_license,
+    g.is_branch_protected,
+    g.requires_code_review,
+    g.has_security_policy,
+
+    s.security_score,
+    s.vuln_count,
+    s.vuln_data_available,
+    s.has_dep_update_tool,
+
     current_timestamp()              as computed_at
 
 from all_repos m
@@ -282,11 +375,13 @@ left join commit_activity       c on m.repo_full_name = c.repo_full_name
 left join issue_health          i on m.repo_full_name = i.repo_full_name
 left join pr_health             p on m.repo_full_name = p.repo_full_name
 left join contributor_diversity d on m.repo_full_name = d.repo_full_name
+left join governance            g on m.repo_full_name = g.repo_full_name
+left join security              s on m.repo_full_name = s.repo_full_name
 """
 
 
 # ---------------------------------------------------------------------------
-# 7. gold_health_scores  (DELTA TABLE)
+# 9. gold_health_scores  (DELTA TABLE)
 # ---------------------------------------------------------------------------
 
 GOLD_HEALTH_SCORES_SQL = f"""
@@ -327,7 +422,19 @@ normalised as (
         round(
             case when bus_factor_risk is null then 5.0
                  else (1.0 - bus_factor_risk) * 10.0 end, 2
-        ) as bus_factor_score
+        ) as bus_factor_score,
+
+        round(
+            case when governance_score is null then 5.0
+                 else governance_score end, 2
+        ) as governance_score,
+
+        round(
+            case when security_score is null then 5.0
+                 else security_score end, 2
+        ) as security_score,
+
+        coalesce(vuln_data_available, false) as vuln_data_available
 
     from base
 ),
@@ -338,7 +445,9 @@ scored as (
             + issue_score       * 0.20
             + pr_score          * 0.25
             + contributor_score * 0.20
-            + bus_factor_score  * 0.20,
+            + bus_factor_score  * 0.20
+            + governance_score  * 0.00
+            + security_score    * 0.00,
             2
         ) as health_score
     from normalised
@@ -350,6 +459,8 @@ select
     cast(null as double) as prev_health_score,
     data_days_available, first_event_date, last_event_date,
     commit_score, issue_score, pr_score, contributor_score, bus_factor_score,
+    governance_score, security_score,
+    vuln_data_available,
     has_push_data,
     computed_at
 from scored
@@ -366,6 +477,8 @@ ALL_MODELS: list[tuple[str, str]] = [
     ("int_issue_health",         INT_ISSUE_HEALTH_SQL),
     ("int_pr_health",            INT_PR_HEALTH_SQL),
     ("int_contributor_diversity",INT_CONTRIBUTOR_DIVERSITY_SQL),
+    ("int_governance",           INT_GOVERNANCE_SQL),
+    ("int_security",             INT_SECURITY_SQL),
     ("gold_project_health",      GOLD_PROJECT_HEALTH_SQL),
     ("gold_health_scores",       GOLD_HEALTH_SCORES_SQL),
 ]

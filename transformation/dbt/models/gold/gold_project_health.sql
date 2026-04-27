@@ -74,6 +74,32 @@ contributor_diversity as (
         bus_factor_risk
     from {{ ref('int_contributor_diversity') }}
 
+),
+
+governance as (
+
+    select
+        repo_full_name,
+        governance_score,
+        is_maintained,
+        has_license,
+        is_branch_protected,
+        requires_code_review,
+        has_security_policy
+    from {{ ref('int_governance') }}
+
+),
+
+security as (
+
+    select
+        repo_full_name,
+        security_score,
+        vuln_count,
+        vuln_data_available,
+        has_dep_update_tool
+    from {{ ref('int_security') }}
+
 )
 
 select
@@ -106,10 +132,26 @@ select
     d.contributor_count,
     d.bus_factor_risk,
 
+    -- Governance signals (null when repo not yet in github_scorecard)
+    g.governance_score,
+    g.is_maintained,
+    g.has_license,
+    g.is_branch_protected,
+    g.requires_code_review,
+    g.has_security_policy,
+
+    -- Security signals (null when repo not yet in github_scorecard)
+    s.security_score,
+    s.vuln_count,
+    s.vuln_data_available,
+    s.has_dep_update_tool,
+
     current_timestamp()                as computed_at
 
 from all_repos m
-left join commit_activity      c on m.repo_full_name = c.repo_full_name
-left join issue_health         i on m.repo_full_name = i.repo_full_name
-left join pr_health            p on m.repo_full_name = p.repo_full_name
+left join commit_activity       c on m.repo_full_name = c.repo_full_name
+left join issue_health          i on m.repo_full_name = i.repo_full_name
+left join pr_health             p on m.repo_full_name = p.repo_full_name
 left join contributor_diversity d on m.repo_full_name = d.repo_full_name
+left join governance            g on m.repo_full_name = g.repo_full_name
+left join security              s on m.repo_full_name = s.repo_full_name

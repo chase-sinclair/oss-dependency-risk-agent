@@ -4,12 +4,24 @@
   Gold layer: composite health score (0-10) per project, derived from
   ALL available data (not a single calendar month).
 
-  Weights (must sum to 1.0):
-    commit_frequency      25%
-    issue_resolution_rate 20%
-    pr_merge_rate         20%
-    contributor_count     20%
-    bus_factor_risk       15%
+  ACTIVE weights (sum = 1.0) — governance and security are 0.00 placeholders
+  until Phase 9 scorecard data covers the full portfolio:
+    commit_score:       0.15
+    issue_score:        0.20
+    pr_score:           0.25
+    contributor_score:  0.20
+    bus_factor_score:   0.20
+    governance_score:   0.00  (placeholder)
+    security_score:     0.00  (placeholder)
+
+  FINAL weights to activate after portfolio validation:
+    commit_score:       0.10
+    issue_score:        0.15
+    pr_score:           0.20
+    contributor_score:  0.15
+    bus_factor_score:   0.15
+    governance_score:   0.15
+    security_score:     0.10
 
   Normalisation to 0-10:
     commit_score      : log10(1 + cpw*50) / log10(501) * 10  (logarithmic; 1/mo→4, 5/mo→6, 20/mo→9, cap at 10)
@@ -17,8 +29,9 @@
     pr_score          : min(pr_merge_rate, 1.0) * 10
     contributor_score : min(contributor_count / 20.0, 1.0) * 10   (20+ contributors = max)
     bus_factor_score  : (1.0 - bus_factor_risk) * 10               (inverted: lower risk = better)
-
-  Composite weights: commit=0.15, issue=0.20, pr=0.25, contributor=0.20, bus_factor=0.20
+    governance_score  : (pts / 12) * 10  where pts = maintained(4) + license(2) + protected(2) + review(2) + sec_policy(2)
+    security_score    : vuln_score(0-10)*0.6 + dep_update_score(0 or 10)*0.4
+                        vuln_score = max(0, 10 - vuln_count*2); 5.0 fallback when ecosystem unknown
 
   Null handling: metrics with no data default to 5.0 (neutral) so a single
   absent signal does not collapse the overall score.
@@ -93,7 +106,24 @@ normalised as (
                 else (1.0 - bus_factor_risk) * 10.0
             end,
             2
-        ) as bus_factor_score
+        ) as bus_factor_score,
+
+        -- Governance score: 5.0 neutral fallback when repo not yet in github_scorecard
+        round(
+            case when governance_score is null then 5.0
+                 else governance_score end,
+            2
+        ) as governance_score,
+
+        -- Security score: 5.0 neutral fallback when repo not yet in github_scorecard
+        round(
+            case when security_score is null then 5.0
+                 else security_score end,
+            2
+        ) as security_score,
+
+        -- Propagate vuln_data_available for UI amber badge when ecosystem unknown
+        coalesce(vuln_data_available, false) as vuln_data_available
 
     from base
 
@@ -108,7 +138,9 @@ scored as (
             + issue_score       * 0.20
             + pr_score          * 0.25
             + contributor_score * 0.20
-            + bus_factor_score  * 0.20,
+            + bus_factor_score  * 0.20
+            + governance_score  * 0.00
+            + security_score    * 0.00,
             2
         ) as health_score
     from normalised
@@ -130,6 +162,9 @@ select
     pr_score,
     contributor_score,
     bus_factor_score,
+    governance_score,
+    security_score,
+    vuln_data_available,
     has_push_data,
     computed_at
 from scored
