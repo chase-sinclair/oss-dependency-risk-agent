@@ -4,24 +4,14 @@
   Gold layer: composite health score (0-10) per project, derived from
   ALL available data (not a single calendar month).
 
-  ACTIVE weights (sum = 1.0) — governance and security are 0.00 placeholders
-  until Phase 9 scorecard data covers the full portfolio:
-    commit_score:       0.15
-    issue_score:        0.20
-    pr_score:           0.25
-    contributor_score:  0.20
-    bus_factor_score:   0.20
-    governance_score:   0.00  (placeholder)
-    security_score:     0.00  (placeholder)
-
-  FINAL weights to activate after portfolio validation:
-    commit_score:       0.10
+  Active weights (sum = 1.0):
+    commit_score:       0.20
     issue_score:        0.15
-    pr_score:           0.20
+    pr_score:           0.15
     contributor_score:  0.15
-    bus_factor_score:   0.15
-    governance_score:   0.15
-    security_score:     0.10
+    bus_factor_score:   0.00  (informational only — window-sensitive, not in composite)
+    governance_score:   0.20
+    security_score:     0.15
 
   Normalisation to 0-10:
     commit_score      : log10(1 + cpw*50) / log10(501) * 10  (logarithmic; 1/mo→4, 5/mo→6, 20/mo→9, cap at 10)
@@ -32,6 +22,8 @@
     governance_score  : (pts / 12) * 10  where pts = maintained(4) + license(2) + protected(2) + review(2) + sec_policy(2)
     security_score    : vuln_score(0-10)*0.6 + dep_update_score(0 or 10)*0.4
                         vuln_score = max(0, 10 - vuln_count*2); 5.0 fallback when ecosystem unknown
+    pr_score          : log10(1 + prs_closed_per_week*50) / log10(501) * 10  (same log scale as commit_score)
+                        NULL prs_closed_per_week → 5.0 fallback; 0 closes in window → 0.0
 
   Null handling: metrics with no data default to 5.0 (neutral) so a single
   absent signal does not collapse the overall score.
@@ -81,11 +73,11 @@ normalised as (
             2
         ) as issue_score,
 
-        -- PR merge rate: 1.0 -> score 10
+        -- PR throughput: log scale on prs_closed_per_week (window-stable vs closed/opened ratio)
         round(
             case
-                when pr_merge_rate is null then 5.0
-                else least(pr_merge_rate, 1.0) * 10.0
+                when prs_closed_per_week is null then 5.0
+                else least(log10(1.0 + prs_closed_per_week * 50.0) / log10(501.0) * 10.0, 10.0)
             end,
             2
         ) as pr_score,
@@ -134,13 +126,13 @@ scored as (
     select
         *,
         round(
-              commit_score      * 0.15
-            + issue_score       * 0.20
-            + pr_score          * 0.25
-            + contributor_score * 0.20
-            + bus_factor_score  * 0.20
-            + governance_score  * 0.00
-            + security_score    * 0.00,
+              commit_score      * 0.20
+            + issue_score       * 0.15
+            + pr_score          * 0.15
+            + contributor_score * 0.15
+            + bus_factor_score  * 0.00
+            + governance_score  * 0.20
+            + security_score    * 0.15,
             2
         ) as health_score
     from normalised

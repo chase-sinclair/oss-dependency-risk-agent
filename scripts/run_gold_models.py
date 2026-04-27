@@ -145,7 +145,7 @@ from aggregated
 INT_PR_HEALTH_SQL = f"""
 CREATE OR REPLACE VIEW {fqn("int_pr_health")} AS
 with pr_events as (
-    select repo_full_name, org_name, repo_name, payload_action
+    select repo_full_name, org_name, repo_name, payload_action, event_date
     from {fqn("stg_github_events")}
     where event_type = 'PullRequestEvent'
       and payload_action in ('opened', 'closed')
@@ -154,12 +154,14 @@ aggregated as (
     select
         repo_full_name, org_name, repo_name,
         count_if(payload_action = 'opened') as prs_opened,
-        count_if(payload_action = 'closed') as prs_closed
+        count_if(payload_action = 'closed') as prs_closed,
+        count(distinct event_date)          as active_days
     from pr_events
     group by repo_full_name, org_name, repo_name
 )
 select
     *,
+    round(cast(prs_closed as double) / nullif(active_days, 0) * 7.0, 2) as prs_closed_per_week,
     case
         when prs_opened = 0 then null
         else round(cast(prs_closed as double) / prs_opened, 4)
@@ -317,7 +319,7 @@ issue_health as (
     from {fqn("int_issue_health")}
 ),
 pr_health as (
-    select repo_full_name, prs_opened, prs_closed, pr_merge_rate
+    select repo_full_name, prs_opened, prs_closed, prs_closed_per_week, pr_merge_rate
     from {fqn("int_pr_health")}
 ),
 contributor_diversity as (
@@ -351,6 +353,7 @@ select
 
     coalesce(p.prs_opened, 0)        as prs_opened,
     coalesce(p.prs_closed, 0)        as prs_closed,
+    p.prs_closed_per_week,
     p.pr_merge_rate,
 
     d.contributor_count,
@@ -410,8 +413,9 @@ normalised as (
         ) as issue_score,
 
         round(
-            case when pr_merge_rate is null then 5.0
-                 else least(pr_merge_rate, 1.0) * 10.0 end, 2
+            case when prs_closed_per_week is null then 5.0
+                 else least(log10(1.0 + prs_closed_per_week * 50.0) / log10(501.0) * 10.0, 10.0)
+            end, 2
         ) as pr_score,
 
         round(
@@ -441,13 +445,13 @@ normalised as (
 scored as (
     select *,
         round(
-              commit_score      * 0.15
-            + issue_score       * 0.20
-            + pr_score          * 0.25
-            + contributor_score * 0.20
-            + bus_factor_score  * 0.20
-            + governance_score  * 0.00
-            + security_score    * 0.00,
+              commit_score      * 0.20
+            + issue_score       * 0.15
+            + pr_score          * 0.15
+            + contributor_score * 0.15
+            + bus_factor_score  * 0.00
+            + governance_score  * 0.20
+            + security_score    * 0.15,
             2
         ) as health_score
     from normalised

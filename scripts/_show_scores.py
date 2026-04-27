@@ -6,10 +6,9 @@ load_dotenv()
 from agent.tools.databricks_query import query_databricks
 
 REPOS = [
-    "99designs/gqlgen",
-    "Automattic/mongoose",
-    "Bearer/bearer",
-    "BerriAI/litellm",
+    "boto/boto3",
+    "pytest-dev/pytest",
+    "langchain-ai/langchain",
     "BurntSushi/ripgrep",
 ]
 

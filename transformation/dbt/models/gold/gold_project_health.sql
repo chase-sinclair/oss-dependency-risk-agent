@@ -61,6 +61,7 @@ pr_health as (
         repo_full_name,
         prs_opened,
         prs_closed,
+        prs_closed_per_week,
         pr_merge_rate
     from {{ ref('int_pr_health') }}
 
@@ -126,6 +127,7 @@ select
     -- PR health (null when no PullRequestEvents)
     coalesce(p.prs_opened, 0)          as prs_opened,
     coalesce(p.prs_closed, 0)          as prs_closed,
+    p.prs_closed_per_week,
     p.pr_merge_rate,
 
     -- Contributor diversity (null when no PushEvents)
